@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>皇帝时间轴（XLSX 多表 · 到“月”）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+.tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
+.bar{height:10px;border-radius:9999px;opacity:.95}
+.label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:11px;padding:0 4px;border-radius:4px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e}
+</style>
+</head>
+<body class="bg-neutral-50 text-neutral-800">
+<main class="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+<header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+  <div>
+    <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴 · 多工作表（支持到月份）</h1>
+    <p class="text-neutral-500">将 <code>emperors.xlsx</code> 与本页放同目录；表头支持：<span class="font-mono">朝代 / 姓名 / 常用称呼 / 庙号 / 谥号 / 纪年时间 / 在位起 / 在位止 / 额外在位 / 颜色</span>。额外在位示例：<span class="font-mono">705-04~710-06; 712~714-03</span>。年月写法支持：<span class="font-mono">705-06、705/06、705.06、705年6月、-141-11、705</span>。</p>
+  </div>
+  <div class="flex gap-2">
+    <button id="reloadBtn" class="px-3 py-2 rounded-md border bg-white">重新读取 XLSX</button>
+    <button id="exportJsonBtn" class="px-3 py-2 rounded-md bg-black text-white">导出 JSON</button>
+  </div>
+</header>
+
+<section class="bg-white border rounded-xl p-4 grid sm:grid-cols-4 gap-3 items-end">
+  <div><label class="text-sm text-neutral-600">搜索</label>
+    <input id="q" class="mt-1 w-full px-3 py-2 border rounded-lg" placeholder="输入朝代/姓名/常用称呼/庙号/谥号…"/>
+  </div>
+  <div><label class="text-sm text-neutral-600">起始（705 或 705-06）</label>
+    <input id="yStart" class="mt-1 w-full px-3 py-2 border rounded-lg" placeholder="留空=不限"/>
+  </div>
+  <div><label class="text-sm text-neutral-600">结束（710 或 710-03）</label>
+    <input id="yEnd" class="mt-1 w-full px-3 py-2 border rounded-lg" placeholder="留空=不限"/>
+  </div>
+  <div class="flex gap-2"><button id="clearRange" class="px-3 py-2 rounded-md border bg-white w-full">清除范围</button></div>
+</section>
+
+<section class="bg-white border rounded-xl p-5 space-y-4">
+  <div class="text-lg font-semibold">时间轴（按朝代分轨，可折叠）</div>
+  <div class="border rounded-lg overflow-hidden">
+    <div class="grid" style="grid-template-columns:180px 1fr;">
+      <div class="bg-neutral-50 border-r">
+        <div class="h-10 flex items-center px-3 text-xs text-neutral-500 border-b">朝代</div>
+        <div id="dynList" class="max-h-96 overflow-y-auto"></div>
+      </div>
+      <div>
+        <div id="ruler" class="h-10 relative border-b select-none"></div>
+        <div id="tracks" class="max-h-96 overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
+  <div class="text-xs text-neutral-500">提示：主刻度为“年”，条形与标签精确到“月”。</div>
+</section>
+
+<section id="lists" class="space-y-6"></section>
+<footer class="text-xs text-neutral-400 py-8">© 纯前端 · XLSX 多表合并 · 支持月份</footer>
+</main>
+
+<script>
+(function(){
+  const S = { rows:[], people:[], collapsed:{}, min:0, max:1 };
+  const $ = s=>document.querySelector(s);
+  const dynList=$('#dynList'), ruler=$('#ruler'), tracks=$('#tracks'), lists=$('#lists');
+
+  // 解析“年-月”
+  function parseYM(v){
+    if(v==null) return;
+    const t = String(v).trim(); if(!t) return;
+    let m = t.match(/^([+\\-]?\\d{1,5})\\s*(?:[\\/.年\\-\\–\\—]\\s*(\\d{1,2}))?\\s*(?:月)?$/);
+    if(m){ const y=parseInt(m[1],10); const mo=m[2]?Math.max(1,Math.min(12,parseInt(m[2],10))):undefined; return {y,m:mo}; }
+    let m2 = t.match(/^公元前\\s*(\\d{1,5})(?:[年\\-\\/.]\\s*(\\d{1,2}))?/);
+    if(m2){ const y=-parseInt(m2[1],10); const mo=m2[2]?Math.max(1,Math.min(12,parseInt(m2[2],10))):undefined; return {y,m:mo}; }
+  }
+  const ymToFloat = ym=> ym? ym.y + (ym.m? (ym.m-1)/12 : 0) : undefined;
+  const fmtYM = ym=> !ym? '?' : (ym.y<0? (ym.m? `公元前${Math.abs(ym.y)}-${String(ym.m).padStart(2,'0')}`:`公元前${Math.abs(ym.y)}`) : (ym.m? `${ym.y}-${String(ym.m).padStart(2,'0')}`: String(ym.y)));
+  const H = s=>String(s||'').trim();
+  const key = r=> `${H(r['朝代'])}__${H(r['姓名'])}`;
+  function parseExtra(text){
+    const t=H(text); if(!t) return [];
+    return t.split(/;|；/).map(x=>x.trim()).filter(Boolean).map(seg=>{
+      const [a,b]=seg.split(/~|—|–|至|到/).map(s=>s.trim());
+      const sa=parseYM(a), sb=parseYM(b);
+      if(!sa && !sb) return null;
+      return {startYM: sa||sb, endYM: sb||sa};
+    }).filter(Boolean);
+  }
+
+  async function loadXLSX(){
+    const res = await fetch('./emperors.xlsx?ts='+Date.now(), {cache:'no-store'});
+    if(!res.ok) { alert('未找到 emperors.xlsx'); return; }
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf,{type:'array'});
+    const rows=[];
+    wb.SheetNames.forEach(n=>{
+      const ws=wb.Sheets[n]; if(!ws) return;
+      const list=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+      list.forEach(r=>{ r.__sheet=n; rows.push(r); });
+    });
+    S.rows = rows;
+    normalize();
+    renderAll();
+  }
+
+  function normalize(){
+    const map=new Map();
+    for(const r of S.rows){
+      const dynasty=H(r['朝代']), emperor=H(r['姓名']); if(!dynasty && !emperor) continue;
+      const alias=H(r['常用称呼']), temple=H(r['庙号']), posthumous=H(r['谥号']), notes=H(r['纪年时间']), color=H(r['颜色']);
+      const sYM=parseYM(r['在位起']), eYM=parseYM(r['在位止']), extras=parseExtra(r['额外在位']);
+      const k=key(r);
+      if(!map.has(k)) map.set(k,{id:k,dynasty,emperor,alias,templeName:temple,posthumousTitle:posthumous,notes,color,reigns:[]});
+      const obj=map.get(k);
+      obj.alias ||= alias; obj.templeName ||= temple; obj.posthumousTitle ||= posthumous; obj.notes ||= notes; obj.color ||= color;
+      if(sYM || eYM) obj.reigns.push({startYM:sYM||eYM, endYM:eYM||sYM});
+      extras.forEach(x=>obj.reigns.push(x));
+    }
+    const people=[...map.values()].map(p=>{
+      p.reigns=p.reigns.filter(d=>d.startYM||d.endYM).map(d=>({startYM:d.startYM||d.endYM, endYM:d.endYM||d.startYM, s:ymToFloat(d.startYM||d.endYM), t:ymToFloat(d.endYM||d.startYM)}));
+      p.reigns.sort((a,b)=>(a.s??-1e9)-(b.s??-1e9));
+      return p;
+    }).filter(p=>p.reigns.length);
+    const nums=[]; people.forEach(p=>p.reigns.forEach(d=>{ if(d.s!=null) nums.push(d.s); if(d.t!=null) nums.push(d.t);}));
+    S.min = nums.length? Math.min(...nums):0; S.max = nums.length? Math.max(...nums):1;
+    people.sort((a,b)=>{ const d=a.dynasty.localeCompare(b.dynasty,'zh-Hans-CN-u-co-pinyin'); if(d) return d; const as=a.reigns[0]?.s??-1e9, bs=b.reigns[0]?.s??-1e9; return as-bs || a.emperor.localeCompare(b.emperor); });
+    S.people=people;
+  }
+
+  function win(){
+    const pS=parseYM($('#yStart').value), pE=parseYM($('#yEnd').value);
+    return { ws: pS? ymToFloat(pS): -Infinity, we: pE? ymToFloat(pE): Infinity, q: H($('#q').value).toLowerCase() };
+  }
+  function filterPeople(){
+    const {ws,we,q}=win();
+    return S.people.filter(p=>{
+      const txt=[p.dynasty,p.emperor,p.alias,p.templeName,p.posthumousTitle,p.notes].filter(Boolean).join(' ').toLowerCase();
+      if(q && !txt.includes(q)) return false;
+      if(ws===-Infinity && we===Infinity) return true;
+      return p.reigns.some(d=>(d.s??-1e9)<=we && (d.t??1e9)>=ws);
+    });
+  }
+
+  function stepFor(span){ const steps=[2000,1000,500,200,100,50,20,10,5,1]; for(const s of steps){ if(span/s<=12) return s;} return 1000; }
+  const pct=(v,min,span)=>((v-min)/span)*100;
+
+  function renderTimeline(){
+    const list=filterPeople();
+    const {ws,we}=win();
+    const min=(ws===-Infinity)?S.min:ws, max=(we===Infinity)?S.max:we, span=Math.max(1,max-min);
+
+    // 刻度
+    ruler.innerHTML='';
+    const step=stepFor(span), startTick=Math.floor(min/step)*step;
+    for(let y=startTick; y<=max; y+=step){
+      const x=pct(y,min,span), div=document.createElement('div'); div.className='tick'; div.style.left=x+'%';
+      const lab=document.createElement('div'); lab.className='absolute bottom-0 translate-y-full -translate-x-1/2 text-[10px] text-neutral-500';
+      const Y=Math.trunc(y); lab.textContent=Y<0? `公元前${Math.abs(Y)}`: Y;
+      div.appendChild(lab); ruler.appendChild(div);
+    }
+
+    // 按朝代分组
+    const groups={}; list.forEach(p=>{ (groups[p.dynasty] ||= []).push(p); });
+    dynList.innerHTML=''; tracks.innerHTML='';
+
+    Object.keys(groups).forEach(dyn=>{
+      const head=document.createElement('button');
+      head.className='w-full flex items-center gap-2 px-3 py-2 border-b hover:bg-neutral-100 text-left';
+      const dot=document.createElement('span'); dot.className='inline-block w-2 h-2 rounded-full'; dot.style.background=groups[dyn][0]?.color||'#334155';
+      const name=document.createElement('span'); name.className='text-sm font-medium'; name.textContent=dyn;
+      const tog=document.createElement('span'); tog.className='ml-auto text-xs text-neutral-500'; const collapsed=!!S.collapsed[dyn]; tog.textContent=collapsed?'展开':'折叠';
+      head.appendChild(dot); head.appendChild(name); head.appendChild(tog);
+      head.onclick=()=>{ S.collapsed[dyn]=!S.collapsed[dyn]; renderTimeline(); };
+      dynList.appendChild(head);
+
+      const row=document.createElement('div'); row.className='relative h-14 border-b';
+      if(!collapsed){
+        const base=document.createElement('div'); base.className='absolute left-0 right-0 top-1/2 h-px bg-neutral-100'; row.appendChild(base);
+        groups[dyn].forEach((p,i)=>{
+          const label=[p.alias,p.emperor].filter(Boolean).join(' '), color=p.color||'#334155';
+          p.reigns.forEach((d,j)=>{
+            if((d.s??-1e9)>max || (d.t??1e9)<min) return;
+            const s=Math.max(d.s??d.t,min), t=Math.min(d.t??d.s,max);
+            const left=pct(Math.min(s,t),min,span), width=Math.max(0.8,Math.abs(pct(t,min,span)-left));
+            const top=8+((i+j)%3)*12;
+
+            const wrap=document.createElement('div'); wrap.className='absolute'; wrap.style.left=left+'%'; wrap.style.width=width+'%'; wrap.style.top=top+'px';
+            const a=document.createElement('div'); a.className='absolute -left-10 top-1/2 -translate-y-1/2 badge'; a.textContent=fmtYM(d.startYM);
+            const b=document.createElement('div'); b.className='absolute -right-10 top-1/2 -translate-y-1/2 badge'; b.textContent=fmtYM(d.endYM);
+            const bar=document.createElement('div'); bar.className='bar'; bar.style.background=color; bar.title=`${label}（${dyn}） ${fmtYM(d.startYM)}—${fmtYM(d.endYM)}`;
+            const text=document.createElement('div'); text.className='label mt-1'; text.title=bar.title; text.textContent=`${label} (${fmtYM(d.startYM)}—${fmtYM(d.endYM)})`;
+
+            wrap.appendChild(a); wrap.appendChild(b); wrap.appendChild(bar); wrap.appendChild(text); row.appendChild(wrap);
+          });
+        });
+      }
+      tracks.appendChild(row);
+    });
+  }
+
+  function renderLists(){
+    const list=filterPeople(); const groups={}; list.forEach(p=>{ (groups[p.dynasty] ||= []).push(p); });
+    lists.innerHTML='';
+    Object.keys(groups).forEach(dyn=>{
+      const sec=document.createElement('section'); sec.className='space-y-3';
+      const color=groups[dyn].find(x=>x.color)?.color||'#334155';
+      const head=document.createElement('div'); head.className='flex items-center gap-3';
+      head.innerHTML=`<div class="w-2 h-6 rounded-full" style="background:${color}"></div><h2 class="text-xl font-bold">${dyn}（${groups[dyn].length}）</h2>`;
+      const grid=document.createElement('div'); grid.className='grid md:grid-cols-2 lg:grid-cols-3 gap-3';
+      groups[dyn].forEach(p=>{
+        const card=document.createElement('div'); card.className='bg-white border rounded-xl p-4 hover:shadow-md transition-shadow';
+        const label=[p.alias,p.emperor].filter(Boolean).join(' '); const years=p.reigns.map(d=>`${fmtYM(d.startYM)}—${fmtYM(d.endYM)}`).join('；');
+        card.innerHTML=`<div class="flex items-center justify-between"><div class="font-semibold text-lg">${label}</div><div class="text-xs text-neutral-500">${years}</div></div>
+        <div class="text-sm flex flex-wrap gap-x-3 gap-y-1 text-neutral-600 mt-1">
+        ${p.templeName?`<span>庙号：${p.templeName}</span>`:''}${p.posthumousTitle?`<span>谥号：${p.posthumousTitle}</span>`:''}</div>
+        ${p.notes?`<p class="text-sm text-neutral-700 leading-relaxed whitespace-pre-wrap mt-2">${p.notes}</p>`:''}`;
+        grid.appendChild(card);
+      });
+      sec.appendChild(head); sec.appendChild(grid); lists.appendChild(sec);
+    });
+  }
+
+  function renderAll(){ renderTimeline(); renderLists(); }
+
+  // 交互
+  $('#reloadBtn').onclick=loadXLSX;
+  $('#exportJsonBtn').onclick=()=>{
+    const data=filterPeople(); const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='emperors.json'; a.click();
+  };
+  $('#q').oninput=$('#yStart').oninput=$('#yEnd').oninput=renderAll;
+  $('#clearRange').onclick=()=>{ $('#yStart').value=''; $('#yEnd').value=''; renderAll(); };
+
+  loadXLSX();
+})();
+</script>
+</body>
+</html>
