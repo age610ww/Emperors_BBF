@@ -2,32 +2,27 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>皇帝时间轴（滚动修复 + 居中文本）</title>
+<title>皇帝时间轴（极简·标题顶端·条下方标签）</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
-.axis-tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
-.axis-label{position:absolute;bottom:0;transform:translateX(-50%);font-size:11px;color:#374151;white-space:nowrap}
 .bar{height:14px;border-radius:9999px;opacity:.95;position:absolute}
-.bar-label{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;white-space:nowrap;color:#111827;pointer-events:none}
+.bar-label{position:absolute;transform:translateX(-50%);font-size:11px;white-space:nowrap;color:#111827;pointer-events:none}
 .handle{cursor:grab}
 .badge{background:#fff;border:1px solid #e5e7eb;color:#111827;padding:2px 6px;border-radius:999px;font-size:12px}
 </style>
 </head>
 <body class="bg-neutral-50 text-neutral-800">
-<main class="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
-<header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-  <div>
-    <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴</h1>
-    <p class="text-neutral-500">滚轮缩放（以鼠标为中心），**仅**底部灰色滚动条平移；外部刻度显示数字；条中文字已居中显示，条太短则自动隐藏文字避免拥挤。</p>
-  </div>
-  <div class="flex gap-2">
-    <button id="reloadBtn" class="px-3 py-2 rounded-md border bg-white">重新读取 XLSX</button>
-    <button id="exportJsonBtn" class="px-3 py-2 rounded-md bg-black text-white">导出 JSON</button>
-  </div>
+<main class="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
+
+<!-- 顶部标题 -->
+<header class="mb-1">
+  <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴</h1>
+  <p class="text-neutral-500 text-sm">滚轮缩放（以鼠标为中心）；添加式选择朝代；搜索、清空、拖拽排序；自动分轨防重叠。</p>
 </header>
 
+<!-- 选择区 -->
 <section class="bg-white border rounded-xl p-4 space-y-3">
   <div class="grid sm:grid-cols-3 gap-3 items-end">
     <div>
@@ -46,29 +41,20 @@
   <div id="activeDyns" class="flex flex-wrap gap-2"></div>
 </section>
 
-<section class="bg-white border rounded-xl p-5 space-y-2">
-  <div class="text-sm text-neutral-500">外部刻度（年份）：</div>
-  <div class="border rounded-md bg-white">
-    <div id="axis" class="relative h-24 w-full"></div>
-  </div>
-
-  <div class="text-lg font-semibold mt-2">时间轴（滚轮缩放；仅底部横向滚动条平移）</div>
-  <div class="border rounded-lg overflow-hidden">
-    <div class="grid" style="grid-template-columns:200px 1fr;">
-      <div class="bg-neutral-50 border-r">
-        <div class="h-10 flex items-center px-3 text-xs text-neutral-500 border-b">朝代（可拖拽排序）</div>
-        <div id="dynList" class="max-h-96 overflow-y-auto"></div>
-      </div>
-      <div class="relative">
-        <div id="tracksWrap" class="max-h-96 overflow-auto bg-neutral-50">
-          <div id="tracksCanvas" class="relative"></div>
-        </div>
-      </div>
+<!-- 时间轴（无外部刻度、无横向滚动条；朝代列表与轨道顶格显示；条下方标签居中） -->
+<section class="bg-white border rounded-xl p-4">
+  <div class="grid" style="grid-template-columns:200px 1fr;">
+    <div class="bg-neutral-50 border-r">
+      <div class="h-8 flex items-center px-3 text-xs text-neutral-500 border-b">朝代（可拖拽排序）</div>
+      <div id="dynList"></div>
+    </div>
+    <div>
+      <div id="tracksCanvas" class="relative"></div>
     </div>
   </div>
 </section>
 
-<footer class="text-xs text-neutral-400 py-8">© 滚动修复 · 居中文本 · 多朝代添加</footer>
+<footer class="text-center text-xs text-neutral-400 py-6">© 极简版 · 条下方标签</footer>
 </main>
 
 <script>
@@ -76,11 +62,10 @@
   const S = {
     rows:[], dynData:[], order:[], selected:new Set(),
     global:{min:0,max:1,span:1},
-    scale:4, minScale:2, maxScale:300,
   };
   const $=s=>document.querySelector(s);
-  const dynList=$('#dynList'), tracksWrap=$('#tracksWrap'), canvas=$('#tracksCanvas');
-  const axis=$('#axis'), qInput=$('#q'), activeDyns=$('#activeDyns'), dynSelect=$('#dynSelect');
+  const dynList=$('#dynList'), canvas=$('#tracksCanvas');
+  const qInput=$('#q'), activeDyns=$('#activeDyns'), dynSelect=$('#dynSelect');
   const palette=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
 
   // 解析
@@ -109,6 +94,8 @@
     S.rows=rows;
     normalize();
     initDynSelect();
+    // 默认把时间范围设为全局 min/max
+    S.global.span = S.global.max - S.global.min;
     renderAll();
   }
 
@@ -141,8 +128,7 @@
       return {dynasty:d,color,items,lanesCount:lanes.length,min,max};
     });
     const nums=[]; S.dynData.forEach(p=>{nums.push(p.min,p.max);});
-    S.global.min=Math.min(...nums); S.global.max=Math.max(...nums); S.global.span=S.global.max-S.global.min;
-    if(!S.order.length) S.order=S.dynData.map(x=>x.dynasty);
+    S.global.min=Math.min(...nums); S.global.max=Math.max(...nums);
   }
 
   // 下拉与选择
@@ -165,18 +151,9 @@
     });
   }
 
-  // 映射
-  function worldWidth(){ return Math.max(tracksWrap.clientWidth+1, Math.ceil(S.global.span*S.scale)); }
-  function xOf(year){ return Math.round((year - S.global.min)*S.scale); }
-  function yearOf(px){ return px / S.scale + S.global.min; }
-
-  // 刻度步长（最小1年）
-  function stepForYears(visibleYears){
-    const steps=[1,2,5,10,20,50,100,200,500,1000,2000];
-    let s=1;
-    for(const cand of steps){ s=cand; if(visibleYears/10 <= cand) break; }
-    return Math.max(1,s);
-  }
+  // 映射（把 S.global.min..max 映射到容器宽度，无水平滚动）
+  function xOf(year){ const w=canvas.clientWidth; return (year - S.global.min) / (S.global.span||1) * w; }
+  function yearOf(x){ const w=canvas.clientWidth; return x / (w||1) * (S.global.span||1) + S.global.min; }
 
   function filteredDyns(){
     const q=H(qInput.value).toLowerCase();
@@ -188,29 +165,8 @@
     }).filter(d=>d.items.length);
   }
 
-  // 外部刻度
-  function renderAxis(){
-    axis.innerHTML='';
-    const viewLeft = tracksWrap.scrollLeft;
-    const viewRight = viewLeft + tracksWrap.clientWidth;
-    const y1 = yearOf(viewLeft), y2 = yearOf(viewRight);
-    const visibleYears = Math.max(1e-6, y2 - y1);
-    const step = stepForYears(visibleYears);
-    const width = axis.clientWidth;
-    const startYear = Math.floor(y1/step)*step;
-    for(let y=startYear; y<=y2; y+=step){
-      const x = ( (y - y1) / visibleYears ) * width;
-      const tick=document.createElement('div'); tick.className='axis-tick'; tick.style.left=x+'px';
-      const lab=document.createElement('div'); lab.className='axis-label'; lab.textContent=(y<0?`公元前${Math.abs(Math.round(y))}`:Math.round(y));
-      tick.appendChild(lab); axis.appendChild(tick);
-    }
-  }
-
-  // 主渲染
+  // 主渲染（顶格；条下方标签居中）
   function renderTimeline(){
-    const w = worldWidth();
-    canvas.style.width = w+'px';
-    canvas.style.minWidth = w+'px';
     canvas.innerHTML='';
     dynList.innerHTML='';
 
@@ -233,10 +189,10 @@
       }
     });
 
-    // 右侧各行
+    // 右侧各行（条上，名字在条下方居中）
     list.forEach(d=>{
       const track=document.createElement('div'); track.className='relative border-b bg-white';
-      const laneH=26, topPad=8, bottomPad=8;
+      const laneH=30, topPad=0, bottomPad=8;
       const height = topPad + d.lanesCount*laneH + bottomPad;
       track.style.height=height+'px';
 
@@ -249,55 +205,42 @@
         bar.style.left=left+'px'; bar.style.top=top+'px'; bar.style.width=width+'px';
         bar.title=`${d.dynasty} · ${labelText}（${fmtYM(it.sYM)}—${fmtYM(it.eYM)}）`;
 
-        if(width >= 46){
-          const lab=document.createElement('div'); lab.className='bar-label'; lab.textContent=labelText;
-          bar.appendChild(lab);
-        }
+        const lab=document.createElement('div'); lab.className='bar-label';
+        // 居中到条下方
+        lab.style.left=(left + width/2)+'px';
+        lab.style.top=(top + 14 + 12)+'px'; // 条高14，下方留12px
+        lab.textContent=labelText;
 
         track.appendChild(bar);
+        track.appendChild(lab);
       });
 
       canvas.appendChild(track);
     });
   }
 
-  // 缩放（滚轮）+ 修复滚动条失效
-  function attachWheelZoom(container){
-    container.addEventListener('wheel',(e)=>{
+  // 缩放（以鼠标为中心，改变全局时间范围映射到容器）
+  function attachWheelZoom(el){
+    el.addEventListener('wheel',(e)=>{
       e.preventDefault();
-      const rect=container.getBoundingClientRect();
-      const anchor = e.clientX - rect.left;         // 视口内锚点
-      const xWorld = container.scrollLeft + anchor; // 对应到画布坐标
+      const rect=el.getBoundingClientRect();
+      const anchorPx = e.clientX - rect.left;
+      const anchorYear = yearOf(anchorPx);
 
       const k=Math.exp(-e.deltaY*0.0015);
-      const newScale = Math.min(S.maxScale, Math.max(S.minScale, S.scale*k));
-      const ratio = newScale / S.scale;
-      S.scale = newScale;
-
-      // 更新宽度，确保 scrollWidth 正确
-      const w = worldWidth();
-      canvas.style.width = w+'px';
-      canvas.style.minWidth = w+'px';
-
-      const newXWorld = xWorld * ratio;
-      let newScrollLeft = Math.round(newXWorld - anchor);
-
-      const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
-      if(newScrollLeft < 0) newScrollLeft = 0;
-      if(newScrollLeft > maxScroll) newScrollLeft = maxScroll;
-      container.scrollLeft = newScrollLeft;
+      let newSpan = S.global.span / k;
+      if(newSpan < 1) newSpan = 1;
+      const leftRatio = (anchorYear - S.global.min) / (S.global.span||1);
+      const rightRatio = 1 - leftRatio;
+      const newMin = anchorYear - newSpan*leftRatio;
+      const newMax = anchorYear + newSpan*rightRatio;
+      S.global.min = newMin; S.global.max = newMax; S.global.span = newMax - newMin;
 
       renderTimeline();
-      renderAxis();
     }, {passive:false});
   }
 
   // 事件
-  $('#reloadBtn').onclick=loadXLSX;
-  $('#exportJsonBtn').onclick=()=>{
-    const blob=new Blob([JSON.stringify(S.dynData,null,2)],{type:'application/json'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='emperors.json'; a.click();
-  };
   $('#addDyn').onclick=()=>{
     const v=dynSelect.value; if(v==='__ALL__'){ S.dynData.forEach(d=>S.selected.add(d.dynasty)); }
     else if(v){ S.selected.add(v); }
@@ -305,12 +248,11 @@
   };
   $('#clearDyn').onclick=()=>{ S.selected.clear(); renderAll(); };
   qInput.oninput=()=>renderAll();
-  tracksWrap.addEventListener('scroll', renderAxis);
 
-  attachWheelZoom(tracksWrap);
+  attachWheelZoom(canvas);
   loadXLSX();
 
-  function renderAll(){ renderActiveDynChips(); renderTimeline(); renderAxis(); }
+  function renderAll(){ renderActiveDynChips(); renderTimeline(); }
 })();
 </script>
 </body>
