@@ -3,61 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>中国皇帝时间轴（添加朝代 / 自定义时间段）</title>
+  <title>中国皇帝时间轴（添加朝代 / 自定义时间段 / 稳定版）</title>
   <style>
-    :root {
-      --bg: #0f172a;
-      --muted: #94a3b8;
-      --text: #e5e7eb;
-      --danger: #ef4444;
-      --chip: #0b1220;
-      --chip-border: rgba(148,163,184,.35);
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji"; }
-    header { padding: 24px 16px 8px; max-width: 1200px; margin: 0 auto; }
-    h1 { margin: 0 0 8px; font-size: 28px; }
-    .sub { color: var(--muted); font-size: 14px; }
-    .card { max-width: 1200px; margin: 16px auto; background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01)); border: 1px solid rgba(148,163,184,.2); border-radius: 16px; padding: 16px; }
-    .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-    select, input[type="number"], input[type="text"]{ padding:10px 12px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#0b1220; color:var(--text); }
-    .btn{ padding:10px 14px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#60a5fa; color:#07131f; font-weight:600; cursor:pointer; }
-    .btn.secondary{ background:transparent; color:var(--text); }
-    .status{ margin-top:6px; color: var(--muted); font-size:13px; }
-    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
-    .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:var(--chip); border:1px solid var(--chip-border); }
-    .chip .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; }
-    .chip .rm{ cursor:pointer; border:none; background:transparent; color:#93c5fd; font-weight:700; }
-    #timeline-wrap{ width:100%; overflow-x:auto; }
-    svg{ width:100%; height:auto; display:block; }
-    .axis text{ fill:var(--muted); font-size:12px; }
-    .axis line{ stroke: rgba(148,163,184,.35); }
-    .label { fill:#e5e7eb; font-size:12px; }
-    .bar-outline{ stroke:rgba(255,255,255,.55); stroke-width:.4; fill:none; }
-    .group-title{ fill:#cbd5e1; font-size:13px; font-weight:700; }
-    .band{ fill: rgba(148,163,184,.06); }
-    #legend{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 0; color:#cbd5e1; font-size:12px; }
-    #legend .chip{ padding:2px 8px; }
-    .small { font-size: 12px; color: var(--muted); }
+    :root { --bg:#0f172a; --muted:#94a3b8; --text:#e5e7eb; --danger:#ef4444; --chip:#0b1220; --chip-border:rgba(148,163,184,.35); }
+    *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
+    header{padding:24px 16px 8px; max-width:1200px; margin:0 auto;} h1{margin:0 0 8px; font-size:28px;} .sub{color:var(--muted); font-size:14px;}
+    .card{max-width:1200px;margin:16px auto;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));border:1px solid rgba(148,163,184,.2);border-radius:16px;padding:16px;}
+    .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+    select,input[type=number]{padding:10px 12px;border-radius:12px;border:1px solid rgba(148,163,184,.25);background:#0b1220;color:var(--text);}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid rgba(148,163,184,.25);background:#60a5fa;color:#07131f;font-weight:600;cursor:pointer;}
+    .btn.secondary{background:transparent;color:var(--text);} .status{margin-top:6px;color:var(--muted);font-size:13px;}
+    .chips{display:flex;flex-wrap:wrap;gap:8px;} .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-border);}
+    .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block;} .chip .rm{cursor:pointer;border:none;background:transparent;color:#93c5fd;font-weight:700;}
+    #timeline-wrap{width:100%;overflow-x:auto;} svg{width:100%;height:auto;display:block;}
+    .axis text{fill:#94a3b8;font-size:12px;} .axis line{stroke:rgba(148,163,184,.35);} .label{fill:#e5e7eb;font-size:12px;}
+    .bar-outline{stroke:rgba(255,255,255,.55);stroke-width:.4;fill:none;} .group-title{fill:#cbd5e1;font-size:13px;font-weight:700;} .band{fill:rgba(148,163,184,.06);}
+    #legend{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0;color:#cbd5e1;font-size:12px;} #legend .chip{padding:2px 8px;}
+    .err{color:var(--danger);} .small{font-size:12px;color:var(--muted);}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <header>
-  <h1>中国皇帝时间轴（添加朝代 / 自定义时间段）</h1>
-  <div class="sub">把本页面与 <code>emperors.xlsx</code> 放在同一目录。此版本：① 自动读取 <strong>所有工作表</strong>；② 顶部“添加朝代”累积选择多个朝代；③ 左侧标签显示 <strong>常用称呼 姓名</strong>；④ 支持自定义起止年份，仅显示该区间（支持负数=公元前）。</div>
+  <h1>中国皇帝时间轴（添加朝代 / 自定义时间段 / 稳定版）</h1>
+  <div class="sub">将本页面与 <code>emperors.xlsx</code> 放同目录。此版本会优先从本地加载 <code>xlsx.full.min.js</code>（若你把库文件也放进仓库），否则自动尝试多个 CDN；并把加载错误直接显示在页面上。</div>
 </header>
 
 <section class="card">
   <div class="row" style="align-items:flex-start; gap:16px;">
     <div style="display:flex; flex-direction:column; gap:8px;">
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <select id="dynSelect" style="min-width: 260px;"><option value="">加载中…</option></select>
+        <select id="dynSelect" style="min-width:260px;"><option value="">加载中…</option></select>
         <button class="btn" id="btnAdd">添加朝代</button>
         <button class="btn secondary" id="btnClear">清空</button>
       </div>
       <div class="chips" id="chips"></div>
       <div class="status" id="status">正在加载数据…</div>
+      <div class="small">若长时间停在“加载中”，通常是 SheetJS CDN 被拦截或 <code>emperors.xlsx</code> 路径错误。错误详情会显示在这里。</div>
+      <div class="small">建议把 <code>xlsx.full.min.js</code> 放在同目录，并使用本页面的本地优先加载机制。</div>
+      <pre id="errBox" class="small" style="white-space:pre-wrap;"></pre>
     </div>
     <div style="display:flex; flex-direction:column; gap:8px;">
       <div class="small">筛选显示的时间段（例如：-221 到 220，表示公元前221年至公元220年）</div>
@@ -78,6 +61,41 @@
 </section>
 
 <script>
+// ---- Diagnostics: show all runtime errors on the page ----
+window.onerror = function(msg, src, line, col, err){
+  const box = document.getElementById('errBox');
+  box.textContent += "[JS错误] " + msg + " @ " + src + ":" + line + ":" + col + (err? ("\\n" + (err.stack||err)): "") + "\\n";
+};
+</script>
+
+<script>
+// Try load SheetJS from local first, then CDNs
+const SHEETJS_CANDIDATES = [
+  "./xlsx.full.min.js", // put a copy in the same folder for maximum reliability
+  "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+  "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+];
+function loadScriptSeq(urls){
+  return new Promise((resolve, reject)=>{
+    const next = (i)=>{
+      if(i>=urls.length){ reject(new Error("无法加载 SheetJS（所有来源均失败）")); return; }
+      const s = document.createElement('script');
+      s.src = urls[i]; s.async = true;
+      s.onload = ()=> resolve(urls[i]);
+      s.onerror = ()=> {
+        const box = document.getElementById('errBox');
+        box.textContent += "[脚本加载失败] " + urls[i] + "\\n";
+        next(i+1);
+      };
+      document.head.appendChild(s);
+    };
+    next(0);
+  });
+}
+</script>
+
+<script>
 const XLSX_URL = 'emperors.xlsx';
 
 const S = (sel, el=document)=>el.querySelector(sel);
@@ -91,11 +109,7 @@ function parseNum(v){
 }
 function yearLabel(y){ if(y==null) return ''; return y<0?`公元前${-y}年`:`公元${y}年`; }
 function niceStep(range){ const raw=range/8; const p=Math.pow(10,Math.floor(Math.log10(raw))); const cs=[1,2,5,10].map(k=>k*p); let b=cs[0]; for(const c of cs) if(Math.abs(raw-c)<Math.abs(raw-b)) b=c; return Math.max(1,Math.round(b)); }
-function hashColor(str){
-  let h=0; for(let i=0;i<str.length;i++) h = (h*31 + str.charCodeAt(i))>>>0;
-  const hue = h % 360; const sat = 60 + (h % 20); const light = 50;
-  return `hsl(${hue} ${sat}% ${light}%)`;
-}
+function hashColor(str){ let h=0; for(let i=0;i<str.length;i++) h=(h*31+str.charCodeAt(i))>>>0; const hue=h%360; const sat=60+(h%20); return `hsl(${hue} ${sat}% 50%)`; }
 function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
 
 let rows=[], dynSet=new Set(), pickedDynasties=[];
@@ -103,14 +117,17 @@ let customStart=null, customEnd=null; // custom range
 
 async function loadAllSheets(){
   try{
-    const resp = await fetch(XLSX_URL, {cache: 'no-store'});
-    if(!resp.ok) throw new Error('无法加载 '+XLSX_URL+'（是否与本页面同目录？）');
+    if(!window.XLSX){
+      const used = await loadScriptSeq(SHEETJS_CANDIDATES);
+      document.getElementById('errBox').textContent += "[脚本加载成功] 使用来源：" + used + "\\n";
+    }
+    const resp = await fetch(XLSX_URL, {cache:'no-store'});
+    if(!resp.ok) throw new Error('无法加载 '+XLSX_URL+'（HTTP '+resp.status+'）——请确认与本页面同目录、文件名大小写一致，并通过 GitHub Pages 访问而非 file:// 本地打开。');
     const buf = await resp.arrayBuffer();
     const wb = XLSX.read(buf, {type:'array'});
     rows = [];
     wb.SheetNames.forEach(sn=>{
-      const ws = wb.Sheets[sn];
-      if(!ws) return;
+      const ws = wb.Sheets[sn]; if(!ws) return;
       const json = XLSX.utils.sheet_to_json(ws, { raw:true, defval:'' });
       json.forEach(r=>{
         const rec = {
@@ -129,70 +146,31 @@ async function loadAllSheets(){
     });
     rows.forEach(r=> dynSet.add(r.朝代));
     const sel = S('#dynSelect'); sel.innerHTML = '<option value=\"\">选择一个朝代…</option>';
-    [...dynSet].sort().forEach(d=>{
-      const opt = document.createElement('option'); opt.value=d; opt.textContent=d; sel.appendChild(opt);
-    });
+    [...dynSet].sort().forEach(d=>{ const opt=document.createElement('option'); opt.value=d; opt.textContent=d; sel.appendChild(opt); });
     S('#status').textContent = `已加载 ${rows.length} 条记录，${wb.SheetNames.length} 个工作表。选择朝代后点“添加朝代”。`;
   }catch(e){
     console.error(e);
-    S('#status').innerHTML = `<span style="color:var(--danger)">数据加载失败：</span>${e.message}`;
+    S('#status').innerHTML = `<span class="err">数据加载失败：</span>${e.message}`;
+    const box = document.getElementById('errBox');
+    box.textContent += (e.stack || e.message || String(e)) + "\\n";
   }
 }
 
-function addDynasty(){
-  const v = S('#dynSelect').value;
-  if(!v) return;
-  if(pickedDynasties.includes(v)) return;
-  pickedDynasties.push(v);
-  renderChips();
-  draw();
-}
-function removeDynasty(v){
-  pickedDynasties = pickedDynasties.filter(x=>x!==v);
-  renderChips();
-  draw();
-}
-function clearAll(){
-  pickedDynasties = [];
-  renderChips();
-  S('#result').style.display='none';
-}
-function renderChips(){
-  const box = S('#chips'); box.innerHTML='';
-  pickedDynasties.forEach(d=>{
-    const chip = document.createElement('span'); chip.className='chip';
-    const dot = document.createElement('span'); dot.className='dot'; dot.style.background=hashColor(d);
-    const label = document.createElement('span'); label.textContent=d;
-    const rm = document.createElement('button'); rm.className='rm'; rm.textContent='×'; rm.title='移除'; rm.onclick=()=>removeDynasty(d);
-    chip.appendChild(dot); chip.appendChild(label); chip.appendChild(rm); box.appendChild(chip);
-  });
-}
+function addDynasty(){ const v=S('#dynSelect').value; if(!v||pickedDynasties.includes(v)) return; pickedDynasties.push(v); renderChips(); draw(); }
+function removeDynasty(v){ pickedDynasties = pickedDynasties.filter(x=>x!==v); renderChips(); draw(); }
+function clearAll(){ pickedDynasties=[]; renderChips(); S('#result').style.display='none'; }
+function renderChips(){ const box=S('#chips'); box.innerHTML=''; pickedDynasties.forEach(d=>{ const chip=document.createElement('span'); chip.className='chip'; const dot=document.createElement('span'); dot.className='dot'; dot.style.background=hashColor(d); const label=document.createElement('span'); label.textContent=d; const rm=document.createElement('button'); rm.className='rm'; rm.textContent='×'; rm.title='移除'; rm.onclick=()=>removeDynasty(d); chip.appendChild(dot); chip.appendChild(label); chip.appendChild(rm); box.appendChild(chip); }); }
 
-function applyRange(){
-  const s = S('#startYear').value.trim();
-  const e = S('#endYear').value.trim();
-  customStart = s === '' ? null : Number(s);
-  customEnd = e === '' ? null : Number(e);
-  if(customStart!=null && customEnd!=null && customStart>customEnd){
-    // swap
-    const tmp = customStart; customStart = customEnd; customEnd = tmp;
-    S('#startYear').value = customStart; S('#endYear').value = customEnd;
-  }
-  draw();
-}
-function clearRange(){
-  customStart = customEnd = null;
-  S('#startYear').value=''; S('#endYear').value='';
-  draw();
-}
+function applyRange(){ const s=S('#startYear').value.trim(); const e=S('#endYear').value.trim(); customStart=s===''?null:Number(s); customEnd=e===''?null:Number(e); if(customStart!=null && customEnd!=null && customStart>customEnd){ const t=customStart; customStart=customEnd; customEnd=t; S('#startYear').value=customStart; S('#endYear').value=customEnd; } draw(); }
+function clearRange(){ customStart=customEnd=null; S('#startYear').value=''; S('#endYear').value=''; draw(); }
 
 function draw(){
   const list = rows.filter(r => pickedDynasties.includes(r.朝代));
   const groupsMap = new Map();
   list.forEach(r=>{
     if(r.在位起==null || r.在位止==null) return;
-    if(customStart!=null && r.在位止 < customStart) return;   // entirely before range
-    if(customEnd!=null && r.在位起 > customEnd) return;       // entirely after range
+    if(customStart!=null && r.在位止 < customStart) return;
+    if(customEnd!=null && r.在位起 > customEnd) return;
     if(!groupsMap.has(r.朝代)) groupsMap.set(r.朝代, []);
     groupsMap.get(r.朝代).push(r);
   });
@@ -237,7 +215,6 @@ function draw(){
     cursorY += headerH;
     g.rows.forEach((r,i)=>{
       const y = cursorY + i*(rowH+gap);
-      // clamp to custom range for drawing
       const s = customStart!=null ? clamp(r.在位起, customStart, Infinity) : r.在位起;
       const e = customEnd!=null ? clamp(r.在位止, -Infinity, customEnd) : r.在位止;
       const x1 = scale(s), x2 = scale(e);
@@ -247,30 +224,21 @@ function draw(){
       name.setAttribute('x', leftPad - 10); name.setAttribute('y', y + rowH*0.7);
       name.setAttribute('text-anchor','end'); name.setAttribute('class','label');
       const alias = r.常用称呼 || r.姓名;
-      const display = alias === r.姓名 ? alias : `${alias} ${r.姓名}`; // 常用称呼 姓名（用空格）
-      name.textContent = display;
-      gEl.appendChild(name);
+      const display = alias === r.姓名 ? alias : `${alias} ${r.姓名}`;
+      name.textContent = display; gEl.appendChild(name);
 
       const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
-      rect.setAttribute('x', Math.min(x1,x2));
-      rect.setAttribute('y', y);
-      rect.setAttribute('width', Math.max(4, Math.abs(x2-x1)));
-      rect.setAttribute('height', rowH);
-      rect.setAttribute('rx', 5);
-      rect.setAttribute('fill', hashColor(g.dynasty));
-      gEl.appendChild(rect);
+      rect.setAttribute('x', Math.min(x1,x2)); rect.setAttribute('y', y);
+      rect.setAttribute('width', Math.max(4, Math.abs(x2-x1))); rect.setAttribute('height', rowH); rect.setAttribute('rx', 5);
+      rect.setAttribute('fill', hashColor(g.dynasty)); gEl.appendChild(rect);
 
       const outline = document.createElementNS('http://www.w3.org/2000/svg','rect');
-      outline.setAttribute('x', Math.min(x1,x2));
-      outline.setAttribute('y', y);
-      outline.setAttribute('width', Math.max(4, Math.abs(x2-x1)));
-      outline.setAttribute('height', rowH);
-      outline.setAttribute('rx', 5);
+      outline.setAttribute('x', Math.min(x1,x2)); outline.setAttribute('y', y);
+      outline.setAttribute('width', Math.max(4, Math.abs(x2-x1))); outline.setAttribute('height', rowH); outline.setAttribute('rx', 5);
       outline.setAttribute('class','bar-outline'); gEl.appendChild(outline);
 
       const tip = document.createElementNS('http://www.w3.org/2000/svg','title');
-      tip.textContent = `${r.朝代}·${r.姓名}${r.常用称呼?`（${r.常用称呼}）`:''}\n${yearLabel(r.在位起)} — ${yearLabel(r.在位止)}\n来源表：${r.sheet}`;
-      gEl.appendChild(tip);
+      tip.textContent = `${r.朝代}·${r.姓名}${r.常用称呼?`（${r.常用称呼}）`:''}\n${yearLabel(r.在位起)} — ${yearLabel(r.在位止)}\n来源表：${r.sheet}`; gEl.appendChild(tip);
 
       svg.appendChild(gEl);
     });
@@ -300,10 +268,10 @@ function draw(){
   S('#result').style.display='';
 }
 
-S('#btnAdd').addEventListener('click', addDynasty);
-S('#btnClear').addEventListener('click', clearAll);
-S('#btnApplyRange').addEventListener('click', applyRange);
-S('#btnClearRange').addEventListener('click', clearRange);
+document.getElementById('btnAdd').addEventListener('click', addDynasty);
+document.getElementById('btnClear').addEventListener('click', clearAll);
+document.getElementById('btnApplyRange').addEventListener('click', applyRange);
+document.getElementById('btnClearRange').addEventListener('click', clearRange);
 
 loadAllSheets();
 </script>
