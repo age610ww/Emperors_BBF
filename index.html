@@ -2,15 +2,15 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>皇帝时间轴（多朝代添加 · 滚轮缩放 · 固定外部刻度）</title>
+<title>皇帝时间轴（滚动修复 + 居中文本）</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
 .axis-tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
 .axis-label{position:absolute;bottom:0;transform:translateX(-50%);font-size:11px;color:#374151;white-space:nowrap}
-.bar{height:12px;border-radius:9999px;opacity:.95}
-.label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:14px;border-radius:9999px;opacity:.95;position:absolute}
+.bar-label{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;white-space:nowrap;color:#111827;pointer-events:none}
 .handle{cursor:grab}
 .badge{background:#fff;border:1px solid #e5e7eb;color:#111827;padding:2px 6px;border-radius:999px;font-size:12px}
 </style>
@@ -20,7 +20,7 @@
 <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
   <div>
     <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴</h1>
-    <p class="text-neutral-500">添加要展示的朝代；鼠标滚轮在时间轴上直接缩放（以鼠标位置为中心）；仅底部灰色滚动条控制平移；外部年份刻度固定并显示数字（最小间隔 1 年）。</p>
+    <p class="text-neutral-500">滚轮缩放（以鼠标为中心），**仅**底部灰色滚动条平移；外部刻度显示数字；条中文字已居中显示，条太短则自动隐藏文字避免拥挤。</p>
   </div>
   <div class="flex gap-2">
     <button id="reloadBtn" class="px-3 py-2 rounded-md border bg-white">重新读取 XLSX</button>
@@ -68,7 +68,7 @@
   </div>
 </section>
 
-<footer class="text-xs text-neutral-400 py-8">© 固定外部刻度 · 多轨防重叠 · 多朝代添加</footer>
+<footer class="text-xs text-neutral-400 py-8">© 滚动修复 · 居中文本 · 多朝代添加</footer>
 </main>
 
 <script>
@@ -76,7 +76,7 @@
   const S = {
     rows:[], dynData:[], order:[], selected:new Set(),
     global:{min:0,max:1,span:1},
-    scale:4, minScale:2, maxScale:200,
+    scale:4, minScale:2, maxScale:300,
   };
   const $=s=>document.querySelector(s);
   const dynList=$('#dynList'), tracksWrap=$('#tracksWrap'), canvas=$('#tracksCanvas');
@@ -166,14 +166,13 @@
   }
 
   // 映射
-  function worldWidth(){ return Math.max(1, Math.ceil(S.global.span*S.scale)); }
+  function worldWidth(){ return Math.max(tracksWrap.clientWidth+1, Math.ceil(S.global.span*S.scale)); }
   function xOf(year){ return Math.round((year - S.global.min)*S.scale); }
   function yearOf(px){ return px / S.scale + S.global.min; }
 
-  // 刻度步长（最小1年），基于当前可视范围年数
+  // 刻度步长（最小1年）
   function stepForYears(visibleYears){
     const steps=[1,2,5,10,20,50,100,200,500,1000,2000];
-    for(const s of steps){ if(visibleYears/12 <= 1) return 1; } // 如果只剩下不足一年跨度，可显示月；但你要求最小1年，因此直接返回1
     let s=1;
     for(const cand of steps){ s=cand; if(visibleYears/10 <= cand) break; }
     return Math.max(1,s);
@@ -189,7 +188,7 @@
     }).filter(d=>d.items.length);
   }
 
-  // 外部刻度（固定，数字）
+  // 外部刻度
   function renderAxis(){
     axis.innerHTML='';
     const viewLeft = tracksWrap.scrollLeft;
@@ -197,10 +196,8 @@
     const y1 = yearOf(viewLeft), y2 = yearOf(viewRight);
     const visibleYears = Math.max(1e-6, y2 - y1);
     const step = stepForYears(visibleYears);
-
-    // 起点对齐 step
-    const startYear = Math.floor(y1/step)*step;
     const width = axis.clientWidth;
+    const startYear = Math.floor(y1/step)*step;
     for(let y=startYear; y<=y2; y+=step){
       const x = ( (y - y1) / visibleYears ) * width;
       const tick=document.createElement('div'); tick.className='axis-tick'; tick.style.left=x+'px';
@@ -209,9 +206,11 @@
     }
   }
 
-  // 主渲染（每个朝代一行；条与标签附加在各自的 track 内部）
+  // 主渲染
   function renderTimeline(){
-    canvas.style.width = worldWidth()+'px';
+    const w = worldWidth();
+    canvas.style.width = w+'px';
+    canvas.style.minWidth = w+'px';
     canvas.innerHTML='';
     dynList.innerHTML='';
 
@@ -234,46 +233,60 @@
       }
     });
 
-    // 右侧：每个朝代一个 track，自然流式堆叠（不再 transform 叠在一起）
+    // 右侧各行
     list.forEach(d=>{
       const track=document.createElement('div'); track.className='relative border-b bg-white';
-      const laneH=18, topPad=10, bottomPad=8;
+      const laneH=26, topPad=8, bottomPad=8;
       const height = topPad + d.lanesCount*laneH + bottomPad;
       track.style.height=height+'px';
-      track.style.position='relative';
 
       d.items.forEach(it=>{
         const left=xOf(it.sF), right=xOf(it.eF), width=Math.max(2, right-left);
         const top=topPad + it._laneIndex*laneH;
         const labelText=[it.alias,it.emperor].filter(Boolean).join(' ');
-        const bar=document.createElement('div'); bar.className='bar absolute'; bar.style.background=d.color;
+
+        const bar=document.createElement('div'); bar.className='bar'; bar.style.background=d.color;
         bar.style.left=left+'px'; bar.style.top=top+'px'; bar.style.width=width+'px';
         bar.title=`${d.dynasty} · ${labelText}（${fmtYM(it.sYM)}—${fmtYM(it.eYM)}）`;
-        const lab=document.createElement('div'); lab.className='label absolute'; lab.textContent=labelText;
-        lab.style.left=left+'px'; lab.style.top=(top+12)+'px'; lab.style.maxWidth=Math.max(40,width+60)+'px';
-        track.appendChild(bar); track.appendChild(lab);
+
+        if(width >= 46){
+          const lab=document.createElement('div'); lab.className='bar-label'; lab.textContent=labelText;
+          bar.appendChild(lab);
+        }
+
+        track.appendChild(bar);
       });
 
       canvas.appendChild(track);
     });
-
-    // 设置画布总高度 = 多个 track 的总高度（由自然流式决定，这里不强制）
   }
 
-  // 缩放（鼠标滚轮，锚点为鼠标位于画布处）
+  // 缩放（滚轮）+ 修复滚动条失效
   function attachWheelZoom(container){
     container.addEventListener('wheel',(e)=>{
-      // 仅当鼠标在水平滚动区域内时缩放；防止页面上下滚动
       e.preventDefault();
       const rect=container.getBoundingClientRect();
-      const x=e.clientX-rect.left + container.scrollLeft;
+      const anchor = e.clientX - rect.left;         // 视口内锚点
+      const xWorld = container.scrollLeft + anchor; // 对应到画布坐标
+
       const k=Math.exp(-e.deltaY*0.0015);
       const newScale = Math.min(S.maxScale, Math.max(S.minScale, S.scale*k));
       const ratio = newScale / S.scale;
-      S.scale=newScale;
-      const newX = x * ratio;
-      const screenX = e.clientX - rect.left;
-      container.scrollLeft = newX - screenX;
+      S.scale = newScale;
+
+      // 更新宽度，确保 scrollWidth 正确
+      const w = worldWidth();
+      canvas.style.width = w+'px';
+      canvas.style.minWidth = w+'px';
+
+      const newXWorld = xWorld * ratio;
+      let newScrollLeft = Math.round(newXWorld - anchor);
+
+      const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+      if(newScrollLeft < 0) newScrollLeft = 0;
+      if(newScrollLeft > maxScroll) newScrollLeft = maxScroll;
+      container.scrollLeft = newScrollLeft;
+
       renderTimeline();
       renderAxis();
     }, {passive:false});
