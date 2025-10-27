@@ -30,9 +30,6 @@
     .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border);}
     .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
     .chip .rm{cursor:pointer;border:none;background:transparent;color:var(--accent);font-weight:700;}
-    .chip[draggable="true"]{cursor:grab;}
-    .chip.dragging{opacity:.5;}
-    .drop-hint{outline:2px dashed var(--accent); outline-offset:2px; border-radius:12px;}
     #timeline-wrap{width:100%;overflow-x:auto;}
     svg{width:100%;height:auto;display:block;background:#fff;}
     .axis text{fill:var(--axis);font-size:12px;}
@@ -57,7 +54,7 @@
         <button class="btn" id="btnAdd">添加朝代</button>
         <button class="btn secondary" id="btnClear">清空</button>
       </div>
-      <div class="chips" id="chips" aria-label="已选择的朝代，可拖动调整顺序"></div>
+      <div class="chips" id="chips" aria-label="已选择的朝代（按从古到今排序）"></div>
       <div class="status" id="status">正在加载数据…</div>
     </div>
     <div style="display:flex; flex-direction:column; gap:8px;">
@@ -89,41 +86,53 @@ function niceStep(range){const raw=range/8;const p=Math.pow(10,Math.floor(Math.l
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n));}
 
 let rows=[],dynSet=new Set(),pickedDynasties=[],customStart=null,customEnd=null;
+const dynRangeMap=new Map(); // dynasty -> {start,end}
+
 async function loadData(){
   try{
     const resp=await fetch(XLSX_URL);if(!resp.ok)throw new Error('无法加载 emperors.xlsx');const buf=await resp.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});
     rows=[];wb.SheetNames.forEach(sn=>{const ws=wb.Sheets[sn];if(!ws)return;const json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});json.forEach(r=>{const rec={朝代:r['朝代']??'',姓名:r['姓名']??'',常用称呼:r['常用称呼']??'',在位起:parseNum(r['在位起']),在位止:parseNum(r['在位止']),sheet:sn};if(rec.朝代&&rec.姓名)rows.push(rec);});});
-    rows.forEach(r=>dynSet.add(r.朝代));const sel=S('#dynSelect');sel.innerHTML='<option value="">选择一个朝代</option>';[...dynSet].sort().forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});S('#status').textContent='加载完成';}
-  catch(e){S('#status').textContent='加载失败：'+e.message;}
+    // build dynasty range map
+    const byDyn=new Map();
+    rows.forEach(r=>{
+      if(r.在位起==null||r.在位止==null) return;
+      if(!byDyn.has(r.朝代)) byDyn.set(r.朝代,{min:r.在位起,max:r.在位止});
+      const o=byDyn.get(r.朝代); o.min=Math.min(o.min,r.在位起); o.max=Math.max(o.max,r.在位止);
+    });
+    byDyn.forEach((v,k)=> dynRangeMap.set(k,{start:v.min,end:v.max}));
+    rows.forEach(r=>dynSet.add(r.朝代));
+    const sel=S('#dynSelect');sel.innerHTML='<option value="">选择一个朝代</option>';
+    [...dynSet].sort((a,b)=>{
+      const ra=dynRangeMap.get(a), rb=dynRangeMap.get(b);
+      const sa=ra?ra.start:Infinity, sb=rb?rb.start:Infinity;
+      return sa-sb;
+    }).forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});
+    S('#status').textContent='加载完成';
+  }catch(e){S('#status').textContent='加载失败：'+e.message;}
 }
-function addDyn(){const v=S('#dynSelect').value;if(!v||pickedDynasties.includes(v))return;pickedDynasties.push(v);renderChips();draw();}
-function removeDyn(v){pickedDynasties=pickedDynasties.filter(x=>x!==v);renderChips();draw();}
+function addDyn(){
+  const v=S('#dynSelect').value;
+  if(!v || pickedDynasties.includes(v)) return;
+  pickedDynasties.push(v);
+  // auto sort by dynasty start year
+  pickedDynasties.sort((a,b)=>{
+    const ra=dynRangeMap.get(a), rb=dynRangeMap.get(b);
+    const sa=ra?ra.start:Infinity, sb=rb?rb.start:Infinity;
+    return sa-sb;
+  });
+  renderChips(); draw();
+}
+function removeDyn(v){ pickedDynasties=pickedDynasties.filter(x=>x!==v); renderChips(); draw(); }
 
-// Drag & Drop with index correction
-let dragIndex=null;
 function renderChips(){
   const wrap=S('#chips'); wrap.innerHTML='';
-  pickedDynasties.forEach((d,idx)=>{
-    const chip=document.createElement('span'); chip.className='chip'; chip.draggable=true; chip.dataset.index=idx;
+  pickedDynasties.forEach(d=>{
+    const chip=document.createElement('span'); chip.className='chip';
     chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}<button class='rm' title='移除'>×</button>`;
     chip.querySelector('.rm').onclick=()=>removeDyn(d);
-    chip.addEventListener('dragstart', (e)=>{ dragIndex=idx; chip.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(idx)); e.dataTransfer.effectAllowed='move'; });
-    chip.addEventListener('dragend', ()=>{ chip.classList.remove('dragging'); dragIndex=null; });
-    chip.addEventListener('dragover', (e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; chip.classList.add('drop-hint'); });
-    chip.addEventListener('dragleave', ()=> chip.classList.remove('drop-hint'));
-    chip.addEventListener('drop', (e)=>{
-      e.preventDefault(); chip.classList.remove('drop-hint');
-      const targetIdx = Number(chip.dataset.index);
-      if(dragIndex===null || dragIndex===targetIdx) return;
-      const item = pickedDynasties.splice(dragIndex,1)[0];
-      const insertIdx = dragIndex < targetIdx ? targetIdx - 1 : targetIdx; // 修正索引偏移
-      pickedDynasties.splice(insertIdx,0,item);
-      renderChips(); draw();
-    });
     wrap.appendChild(chip);
   });
 }
-
 function applyRange(){customStart=S('#startYear').value?Number(S('#startYear').value):null;customEnd=S('#endYear').value?Number(S('#endYear').value):null;if(customStart!=null&&customEnd!=null&&customStart>customEnd)[customStart,customEnd]=[customEnd,customStart];draw();}
 function clearRange(){customStart=customEnd=null;S('#startYear').value='';S('#endYear').value='';draw();}
 
@@ -148,8 +157,12 @@ function draw(){
   let cursorY=topPad;
   dyns.forEach(d=>{
     const headerH=22;
+    // dynasty header with range
     const title=document.createElementNS('http://www.w3.org/2000/svg','text');
-    title.setAttribute('x',12);title.setAttribute('y',cursorY+10);title.setAttribute('class','group-title');title.textContent=d;svg.appendChild(title);
+    title.setAttribute('x',12);title.setAttribute('y',cursorY+10);title.setAttribute('class','group-title');
+    const r=dynRangeMap.get(d); const rangeTxt = r?`（${r.start<0?`前${-r.start}`:r.start} — ${r.end<0?`前${-r.end}`:r.end}）`:'';
+    title.textContent=d + (rangeTxt?` ${rangeTxt}`:'');
+    svg.appendChild(title);
     cursorY+=headerH;
     groups[d].forEach((r,i)=>{
       const y=cursorY+i*(rowH+gap);
@@ -174,6 +187,7 @@ function draw(){
     });
     cursorY+=groups[d].length*(rowH+gap)+groupGap;
   });
+  // year axis
   const axisY=H-40;
   const line=document.createElementNS('http://www.w3.org/2000/svg','line');
   line.setAttribute('x1',leftPad);line.setAttribute('x2',W-rightPad);line.setAttribute('y1',axisY);line.setAttribute('y2',axisY);line.setAttribute('class','axis');svg.appendChild(line);
