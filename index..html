@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>皇帝时间轴（极简·标题顶端·条下方标签）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<style>
+.bar{height:14px;border-radius:9999px;opacity:.95;position:absolute}
+.bar-label{position:absolute;transform:translateX(-50%);font-size:11px;white-space:nowrap;color:#111827;pointer-events:none}
+.handle{cursor:grab}
+.badge{background:#fff;border:1px solid #e5e7eb;color:#111827;padding:2px 6px;border-radius:999px;font-size:12px}
+</style>
+</head>
+<body class="bg-neutral-50 text-neutral-800">
+<main class="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
+
+<!-- 顶部标题 -->
+<header class="mb-1">
+  <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴</h1>
+  <p class="text-neutral-500 text-sm">滚轮缩放（以鼠标为中心）；添加式选择朝代；搜索、清空、拖拽排序；自动分轨防重叠。</p>
+</header>
+
+<!-- 选择区 -->
+<section class="bg-white border rounded-xl p-4 space-y-3">
+  <div class="grid sm:grid-cols-3 gap-3 items-end">
+    <div>
+      <label class="text-sm text-neutral-600">选择朝代（或“全部”）</label>
+      <select id="dynSelect" class="mt-1 w-full px-3 py-2 border rounded-lg"></select>
+    </div>
+    <div class="flex gap-2">
+      <button id="addDyn" class="px-3 py-2 rounded-md bg-blue-600 text-white w-full">添加到时间轴</button>
+      <button id="clearDyn" class="px-3 py-2 rounded-md border bg-white w-full">清空</button>
+    </div>
+    <div>
+      <label class="text-sm text-neutral-600">搜索人物（可选）</label>
+      <input id="q" class="mt-1 w-full px-3 py-2 border rounded-lg" placeholder="对已添加朝代进行人物过滤"/>
+    </div>
+  </div>
+  <div id="activeDyns" class="flex flex-wrap gap-2"></div>
+</section>
+
+<!-- 时间轴（无外部刻度、无横向滚动条；朝代列表与轨道顶格显示；条下方标签居中） -->
+<section class="bg-white border rounded-xl p-4">
+  <div class="grid" style="grid-template-columns:200px 1fr;">
+    <div class="bg-neutral-50 border-r">
+      <div class="h-8 flex items-center px-3 text-xs text-neutral-500 border-b">朝代（可拖拽排序）</div>
+      <div id="dynList"></div>
+    </div>
+    <div>
+      <div id="tracksCanvas" class="relative"></div>
+    </div>
+  </div>
+</section>
+
+<footer class="text-center text-xs text-neutral-400 py-6">© 极简版 · 条下方标签</footer>
+</main>
+
+<script>
+(function(){
+  const S = {
+    rows:[], dynData:[], order:[], selected:new Set(),
+    global:{min:0,max:1,span:1},
+  };
+  const $=s=>document.querySelector(s);
+  const dynList=$('#dynList'), canvas=$('#tracksCanvas');
+  const qInput=$('#q'), activeDyns=$('#activeDyns'), dynSelect=$('#dynSelect');
+  const palette=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+
+  // 解析
+  function parseYM(v){ if(v==null) return; const t=String(v).trim(); if(!t) return;
+    let m=t.match(/^([+\-]?\d{1,5})\s*(?:[\/.年\-–—]\s*(\d{1,2}))?\s*(?:月)?$/);
+    if(m){ const y=parseInt(m[1],10); const mo=m[2]?Math.max(1,Math.min(12,parseInt(m[2],10))):undefined; return {y,m:mo}; }
+    let m2=t.match(/^公元前\s*(\d{1,5})(?:[年\-\/.]\s*(\d{1,2}))?/);
+    if(m2){ const y=-parseInt(m2[1],10); const mo=m2[2]?Math.max(1,Math.min(12,parseInt(m2[2],10))):undefined; return {y,m:mo}; }
+  }
+  const ymToFloat=ym=> ym? ym.y + (ym.m? (ym.m-1)/12 : 0) : undefined;
+  const fmtYM=ym=>!ym?'?':(ym.y<0?(ym.m?`公元前${Math.abs(ym.y)}-${String(ym.m).padStart(2,'0')}`:`公元前${Math.abs(ym.y)}`):(ym.m?`${ym.y}-${String(ym.m).padStart(2,'0')}`:String(ym.y)));
+  const H=s=>String(s||'').trim();
+
+  // 数据
+  async function loadXLSX(){
+    const res=await fetch('./emperors.xlsx?ts='+Date.now(),{cache:'no-store'});
+    if(!res.ok){ alert('未找到 emperors.xlsx'); return; }
+    const buf=await res.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const rows=[];
+    wb.SheetNames.forEach(n=>{
+      const ws=wb.Sheets[n]; if(!ws) return;
+      const list=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+      list.forEach(r=>rows.push(r));
+    });
+    S.rows=rows;
+    normalize();
+    initDynSelect();
+    // 默认把时间范围设为全局 min/max
+    S.global.span = S.global.max - S.global.min;
+    renderAll();
+  }
+
+  function normalize(){
+    const map=new Map();
+    for(const r of S.rows){
+      const dynasty=H(r['朝代']), emperor=H(r['姓名']); if(!dynasty && !emperor) continue;
+      const alias=H(r['常用称呼']), temple=H(r['庙号']), posthumous=H(r['谥号']), notes=H(r['纪年时间']);
+      const s=parseYM(r['在位起']), e=parseYM(r['在位止']); if(!s && !e) continue;
+      (map.get(dynasty) || map.set(dynasty,[]).get(dynasty)).push({
+        dynasty, emperor, alias, temple, posthumous, notes, sYM:s, eYM:e, sF:ymToFloat(s||e), eF:ymToFloat(e||s)
+      });
+    }
+    const dyns=[...map.keys()].sort((a,b)=>a.localeCompare(b,'zh-Hans-CN-u-co-pinyin'));
+    let ci=0;
+    S.dynData=dyns.map(d=>{
+      const color=palette[(ci++)%palette.length];
+      const items=map.get(d).sort((a,b)=>a.sF-b.sF);
+      // 贪心装箱避免重叠
+      const lanes=[]; items.forEach(it=>{
+        let placed=false;
+        for(const ln of lanes){
+          if(ln[ln.length-1].eF <= it.sF){ ln.push(it); placed=true; break; }
+        }
+        if(!placed) lanes.push([it]);
+        it._laneIndex=lanes.length-1;
+      });
+      const min=Math.min(...items.map(x=>x.sF));
+      const max=Math.max(...items.map(x=>x.eF));
+      return {dynasty:d,color,items,lanesCount:lanes.length,min,max};
+    });
+    const nums=[]; S.dynData.forEach(p=>{nums.push(p.min,p.max);});
+    S.global.min=Math.min(...nums); S.global.max=Math.max(...nums);
+  }
+
+  // 下拉与选择
+  function initDynSelect(){
+    dynSelect.innerHTML='';
+    const optAll=document.createElement('option'); optAll.value='__ALL__'; optAll.textContent='全部（添加所有朝代）'; dynSelect.appendChild(optAll);
+    S.dynData.forEach(d=>{ const o=document.createElement('option'); o.value=d.dynasty; o.textContent=d.dynasty; dynSelect.appendChild(o); });
+    renderActiveDynChips();
+  }
+  function renderActiveDynChips(){
+    activeDyns.innerHTML='';
+    if(!S.selected.size){ activeDyns.innerHTML='<span class="text-xs text-neutral-500">未选择任何朝代。</span>'; return; }
+    [...S.selected].forEach(name=>{
+      const d=S.dynData.find(x=>x.dynasty===name); if(!d) return;
+      const chip=document.createElement('span'); chip.className='badge flex items-center gap-2';
+      chip.style.borderColor=d.color;
+      chip.innerHTML=`<span class="inline-block w-2 h-2 rounded-full" style="background:${d.color}"></span>${d.dynasty}<button class="ml-1 text-xs text-neutral-500 hover:text-red-600" aria-label="remove">✕</button>`;
+      chip.querySelector('button').onclick=()=>{S.selected.delete(name); renderAll();};
+      activeDyns.appendChild(chip);
+    });
+  }
+
+  // 映射（把 S.global.min..max 映射到容器宽度，无水平滚动）
+  function xOf(year){ const w=canvas.clientWidth; return (year - S.global.min) / (S.global.span||1) * w; }
+  function yearOf(x){ const w=canvas.clientWidth; return x / (w||1) * (S.global.span||1) + S.global.min; }
+
+  function filteredDyns(){
+    const q=H(qInput.value).toLowerCase();
+    const arr = S.order.filter(n=>S.selected.has(n)).map(n=>S.dynData.find(d=>d.dynasty===n)).filter(Boolean);
+    if(!q) return arr;
+    return arr.map(d=>{
+      const items=d.items.filter(x=>[x.alias,x.emperor,x.temple,x.posthumous,x.notes].join(' ').toLowerCase().includes(q));
+      return {...d,items,lanesCount:Math.max(1,items.reduce((mx,it)=>Math.max(mx,it._laneIndex+1),0))};
+    }).filter(d=>d.items.length);
+  }
+
+  // 主渲染（顶格；条下方标签居中）
+  function renderTimeline(){
+    canvas.innerHTML='';
+    dynList.innerHTML='';
+
+    const list=filteredDyns();
+
+    // 左侧列表（可拖拽）
+    list.forEach(d=>{
+      const head=document.createElement('div');
+      head.className='flex items-center gap-2 px-3 py-2 border-b hover:bg-neutral-100 handle';
+      const dot=document.createElement('span'); dot.className='w-2 h-2 rounded-full'; dot.style.background=d.color;
+      const name=document.createElement('span'); name.textContent=d.dynasty; name.className='text-sm font-medium';
+      head.appendChild(dot); head.appendChild(name); dynList.appendChild(head);
+    });
+    new Sortable(dynList,{
+      animation:150,handle:'.handle',
+      onEnd:()=>{
+        const items=[...dynList.querySelectorAll('span.text-sm')].map(x=>x.textContent);
+        S.order = items.concat(S.order.filter(n=>!items.includes(n)));
+        renderAll();
+      }
+    });
+
+    // 右侧各行（条上，名字在条下方居中）
+    list.forEach(d=>{
+      const track=document.createElement('div'); track.className='relative border-b bg-white';
+      const laneH=30, topPad=0, bottomPad=8;
+      const height = topPad + d.lanesCount*laneH + bottomPad;
+      track.style.height=height+'px';
+
+      d.items.forEach(it=>{
+        const left=xOf(it.sF), right=xOf(it.eF), width=Math.max(2, right-left);
+        const top=topPad + it._laneIndex*laneH;
+        const labelText=[it.alias,it.emperor].filter(Boolean).join(' ');
+
+        const bar=document.createElement('div'); bar.className='bar'; bar.style.background=d.color;
+        bar.style.left=left+'px'; bar.style.top=top+'px'; bar.style.width=width+'px';
+        bar.title=`${d.dynasty} · ${labelText}（${fmtYM(it.sYM)}—${fmtYM(it.eYM)}）`;
+
+        const lab=document.createElement('div'); lab.className='bar-label';
+        // 居中到条下方
+        lab.style.left=(left + width/2)+'px';
+        lab.style.top=(top + 14 + 12)+'px'; // 条高14，下方留12px
+        lab.textContent=labelText;
+
+        track.appendChild(bar);
+        track.appendChild(lab);
+      });
+
+      canvas.appendChild(track);
+    });
+  }
+
+  // 缩放（以鼠标为中心，改变全局时间范围映射到容器）
+  function attachWheelZoom(el){
+    el.addEventListener('wheel',(e)=>{
+      e.preventDefault();
+      const rect=el.getBoundingClientRect();
+      const anchorPx = e.clientX - rect.left;
+      const anchorYear = yearOf(anchorPx);
+
+      const k=Math.exp(-e.deltaY*0.0015);
+      let newSpan = S.global.span / k;
+      if(newSpan < 1) newSpan = 1;
+      const leftRatio = (anchorYear - S.global.min) / (S.global.span||1);
+      const rightRatio = 1 - leftRatio;
+      const newMin = anchorYear - newSpan*leftRatio;
+      const newMax = anchorYear + newSpan*rightRatio;
+      S.global.min = newMin; S.global.max = newMax; S.global.span = newMax - newMin;
+
+      renderTimeline();
+    }, {passive:false});
+  }
+
+  // 事件
+  $('#addDyn').onclick=()=>{
+    const v=dynSelect.value; if(v==='__ALL__'){ S.dynData.forEach(d=>S.selected.add(d.dynasty)); }
+    else if(v){ S.selected.add(v); }
+    renderAll();
+  };
+  $('#clearDyn').onclick=()=>{ S.selected.clear(); renderAll(); };
+  qInput.oninput=()=>renderAll();
+
+  attachWheelZoom(canvas);
+  loadXLSX();
+
+  function renderAll(){ renderActiveDynChips(); renderTimeline(); }
+})();
+</script>
+</body>
+</html>
