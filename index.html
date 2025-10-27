@@ -2,13 +2,13 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>皇帝时间轴（固定外部刻度 · 仅底部滚动）</title>
+<title>皇帝时间轴（多朝代添加 · 滚轮缩放 · 固定外部刻度）</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
 .axis-tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
-.axis-label{position:absolute;top:100%;transform:translateX(-50%);font-size:10px;color:#6b7280;white-space:nowrap}
+.axis-label{position:absolute;bottom:0;transform:translateX(-50%);font-size:11px;color:#374151;white-space:nowrap}
 .bar{height:12px;border-radius:9999px;opacity:.95}
 .label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .handle{cursor:grab}
@@ -20,7 +20,7 @@
 <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
   <div>
     <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴</h1>
-    <p class="text-neutral-500">固定外部刻度，仅底部横向滚动条控制平移；滚轮缩放以鼠标为中心；添加式选择朝代。</p>
+    <p class="text-neutral-500">添加要展示的朝代；鼠标滚轮在时间轴上直接缩放（以鼠标位置为中心）；仅底部灰色滚动条控制平移；外部年份刻度固定并显示数字（最小间隔 1 年）。</p>
   </div>
   <div class="flex gap-2">
     <button id="reloadBtn" class="px-3 py-2 rounded-md border bg-white">重新读取 XLSX</button>
@@ -48,20 +48,18 @@
 
 <section class="bg-white border rounded-xl p-5 space-y-2">
   <div class="text-sm text-neutral-500">外部刻度（年份）：</div>
-  <!-- 固定宽度，不可滚动 -->
   <div class="border rounded-md bg-white">
-    <div id="axis" class="relative h-8 w-full overflow-hidden"></div>
+    <div id="axis" class="relative h-24 w-full"></div>
   </div>
 
   <div class="text-lg font-semibold mt-2">时间轴（滚轮缩放；仅底部横向滚动条平移）</div>
   <div class="border rounded-lg overflow-hidden">
-    <div class="grid" style="grid-template-columns:200px 1fr;min-height:260px;">
+    <div class="grid" style="grid-template-columns:200px 1fr;">
       <div class="bg-neutral-50 border-r">
         <div class="h-10 flex items-center px-3 text-xs text-neutral-500 border-b">朝代（可拖拽排序）</div>
         <div id="dynList" class="max-h-96 overflow-y-auto"></div>
       </div>
       <div class="relative">
-        <!-- 仅此容器可横向滚动 -->
         <div id="tracksWrap" class="max-h-96 overflow-auto bg-neutral-50">
           <div id="tracksCanvas" class="relative"></div>
         </div>
@@ -70,7 +68,7 @@
   </div>
 </section>
 
-<footer class="text-xs text-neutral-400 py-8">© 固定刻度 · 单一滚动源</footer>
+<footer class="text-xs text-neutral-400 py-8">© 固定外部刻度 · 多轨防重叠 · 多朝代添加</footer>
 </main>
 
 <script>
@@ -167,18 +165,18 @@
     });
   }
 
-  // 坐标映射
+  // 映射
   function worldWidth(){ return Math.max(1, Math.ceil(S.global.span*S.scale)); }
   function xOf(year){ return Math.round((year - S.global.min)*S.scale); }
   function yearOf(px){ return px / S.scale + S.global.min; }
 
-  // 刻度步长（最小1年），基于当前视口宽度
-  function stepFor(pxSpan){
-    const targetPx=80;
-    const yearsPerTarget = pxSpan/targetPx / S.scale; // 视口对应多少年 / 目标刻度像素
+  // 刻度步长（最小1年），基于当前可视范围年数
+  function stepForYears(visibleYears){
     const steps=[1,2,5,10,20,50,100,200,500,1000,2000];
-    for(const s of steps){ if(s>=yearsPerTarget) return Math.max(1,s); }
-    return 2000;
+    for(const s of steps){ if(visibleYears/12 <= 1) return 1; } // 如果只剩下不足一年跨度，可显示月；但你要求最小1年，因此直接返回1
+    let s=1;
+    for(const cand of steps){ s=cand; if(visibleYears/10 <= cand) break; }
+    return Math.max(1,s);
   }
 
   function filteredDyns(){
@@ -191,26 +189,27 @@
     }).filter(d=>d.items.length);
   }
 
-  // 渲染外部刻度（固定，不滚动）。根据 tracksWrap.scrollLeft 和容器宽度计算可见范围内的刻度。
+  // 外部刻度（固定，数字）
   function renderAxis(){
-    const viewW = axis.clientWidth;
-    const leftPx = tracksWrap.scrollLeft;
-    const rightPx = leftPx + tracksWrap.clientWidth;
-    const viewPxSpan = rightPx - leftPx;
     axis.innerHTML='';
+    const viewLeft = tracksWrap.scrollLeft;
+    const viewRight = viewLeft + tracksWrap.clientWidth;
+    const y1 = yearOf(viewLeft), y2 = yearOf(viewRight);
+    const visibleYears = Math.max(1e-6, y2 - y1);
+    const step = stepForYears(visibleYears);
 
-    const step = stepFor(viewPxSpan);
-    const leftYear = Math.floor(yearOf(leftPx)/step)*step;
-    for(let y=leftYear; ; y+=step){
-      const x = xOf(y) - leftPx; // 转换为视口内位置
-      if(x > viewW) break;
-      if(x < -50) continue;
+    // 起点对齐 step
+    const startYear = Math.floor(y1/step)*step;
+    const width = axis.clientWidth;
+    for(let y=startYear; y<=y2; y+=step){
+      const x = ( (y - y1) / visibleYears ) * width;
       const tick=document.createElement('div'); tick.className='axis-tick'; tick.style.left=x+'px';
-      const lab=document.createElement('div'); lab.className='axis-label'; lab.textContent=(y<0?`公元前${Math.abs(y)}`:y);
+      const lab=document.createElement('div'); lab.className='axis-label'; lab.textContent=(y<0?`公元前${Math.abs(Math.round(y))}`:Math.round(y));
       tick.appendChild(lab); axis.appendChild(tick);
     }
   }
 
+  // 主渲染（每个朝代一行；条与标签附加在各自的 track 内部）
   function renderTimeline(){
     canvas.style.width = worldWidth()+'px';
     canvas.innerHTML='';
@@ -224,7 +223,7 @@
       head.className='flex items-center gap-2 px-3 py-2 border-b hover:bg-neutral-100 handle';
       const dot=document.createElement('span'); dot.className='w-2 h-2 rounded-full'; dot.style.background=d.color;
       const name=document.createElement('span'); name.textContent=d.dynasty; name.className='text-sm font-medium';
-      dynList.appendChild(head); head.appendChild(dot); head.appendChild(name);
+      head.appendChild(dot); head.appendChild(name); dynList.appendChild(head);
     });
     new Sortable(dynList,{
       animation:150,handle:'.handle',
@@ -235,14 +234,13 @@
       }
     });
 
-    // 右侧条形
-    let y=0;
+    // 右侧：每个朝代一个 track，自然流式堆叠（不再 transform 叠在一起）
     list.forEach(d=>{
       const track=document.createElement('div'); track.className='relative border-b bg-white';
       const laneH=18, topPad=10, bottomPad=8;
       const height = topPad + d.lanesCount*laneH + bottomPad;
-      track.style.position='relative'; track.style.height=height+'px'; track.style.transform=`translateY(${y}px)`;
-      y+=height;
+      track.style.height=height+'px';
+      track.style.position='relative';
 
       d.items.forEach(it=>{
         const left=xOf(it.sF), right=xOf(it.eF), width=Math.max(2, right-left);
@@ -253,20 +251,19 @@
         bar.title=`${d.dynasty} · ${labelText}（${fmtYM(it.sYM)}—${fmtYM(it.eYM)}）`;
         const lab=document.createElement('div'); lab.className='label absolute'; lab.textContent=labelText;
         lab.style.left=left+'px'; lab.style.top=(top+12)+'px'; lab.style.maxWidth=Math.max(40,width+60)+'px';
-        canvas.appendChild(bar); canvas.appendChild(lab);
+        track.appendChild(bar); track.appendChild(lab);
       });
 
       canvas.appendChild(track);
     });
-    canvas.style.height = (y||60)+'px';
+
+    // 设置画布总高度 = 多个 track 的总高度（由自然流式决定，这里不强制）
   }
 
-  // 缩放（仅 tracksWrap 生效），固定刻度根据滚动/缩放重绘
+  // 缩放（鼠标滚轮，锚点为鼠标位于画布处）
   function attachWheelZoom(container){
     container.addEventListener('wheel',(e)=>{
-      if(!e.ctrlKey && !e.metaKey){ // 普通滚轮 => 垂直/水平滚动，交给浏览器；按住 Ctrl/⌘ 时缩放
-        return;
-      }
+      // 仅当鼠标在水平滚动区域内时缩放；防止页面上下滚动
       e.preventDefault();
       const rect=container.getBoundingClientRect();
       const x=e.clientX-rect.left + container.scrollLeft;
@@ -282,9 +279,6 @@
     }, {passive:false});
   }
 
-  // 同步刻度与滚动
-  function onScroll(){ renderAxis(); }
-
   // 事件
   $('#reloadBtn').onclick=loadXLSX;
   $('#exportJsonBtn').onclick=()=>{
@@ -298,10 +292,9 @@
   };
   $('#clearDyn').onclick=()=>{ S.selected.clear(); renderAll(); };
   qInput.oninput=()=>renderAll();
+  tracksWrap.addEventListener('scroll', renderAxis);
 
-  tracksWrap.addEventListener('scroll', onScroll);
   attachWheelZoom(tracksWrap);
-
   loadXLSX();
 
   function renderAll(){ renderActiveDynChips(); renderTimeline(); renderAxis(); }
