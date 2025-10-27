@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>中国皇帝时间轴（白色主题 + 悬浮提示）</title>
+  <title>中国皇帝时间轴</title>
   <style>
     :root {
       --bg: #ffffff;
@@ -15,12 +15,12 @@
       --bar: #3b82f6;    /* blue-500 */
       --axis: #9ca3af;   /* gray-400 */
       --group: #1f2937;  /* gray-800 */
+      --accent: #2563eb;
     }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
-    header{padding:24px 16px 8px; max-width:1200px; margin:0 auto;}
+    header{padding:24px 16px 0; max-width:1200px; margin:0 auto;}
     h1{margin:0 0 8px; font-size:28px;}
-    .sub{color:var(--muted); font-size:14px;}
     .card{max-width:1200px;margin:16px auto;background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;}
     .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
     select,input[type=number]{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--text);}
@@ -28,9 +28,12 @@
     .btn.secondary{background:transparent;color:var(--text);}
     .status{margin-top:6px;color:var(--muted);font-size:13px;}
     .chips{display:flex;flex-wrap:wrap;gap:8px;}
-    .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border);}
+    .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border); user-select:none;}
     .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
-    .chip .rm{cursor:pointer;border:none;background:transparent;color:#2563eb;font-weight:700;}
+    .chip .rm{cursor:pointer;border:none;background:transparent;color:var(--accent);font-weight:700;}
+    .chip[draggable="true"]{cursor:grab;}
+    .chip.dragging{opacity:.5;}
+    .drop-hint{outline:2px dashed var(--accent); outline-offset:2px; border-radius:12px;}
     #timeline-wrap{width:100%;overflow-x:auto;}
     svg{width:100%;height:auto;display:block;background:#fff;}
     .axis text{fill:var(--axis);font-size:12px;}
@@ -39,17 +42,13 @@
     .bar-outline{ stroke:rgba(0,0,0,.15); stroke-width:.4; fill:none; }
     .group-title{ fill:var(--group); font-size:13px; font-weight:700; }
     .band{ fill: #f9fafb; }
-    /* Tooltip */
     .tooltip{ position: fixed; pointer-events:none; z-index: 10; background:#111827; color:#fff; padding:6px 8px; border-radius:8px; font-size:12px; box-shadow:0 6px 18px rgba(0,0,0,.15); transform: translate(-50%, -120%); opacity:0; transition: opacity .12s ease; white-space:nowrap; }
     .tooltip.show{ opacity:1; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-<header>
-  <h1>中国皇帝时间轴（白色主题 + 悬浮提示）</h1>
-  <div class="sub">支持多朝代添加、自定义时间段、左侧“常用称呼 姓名”显示；悬浮提示展示姓名与在位起止。</div>
-</header>
+<header><h1>中国皇帝时间轴</h1></header>
 
 <section class="card">
   <div class="row" style="align-items:flex-start; gap:16px;">
@@ -59,7 +58,7 @@
         <button class="btn" id="btnAdd">添加朝代</button>
         <button class="btn secondary" id="btnClear">清空</button>
       </div>
-      <div class="chips" id="chips"></div>
+      <div class="chips" id="chips" aria-label="已选择的朝代，可拖动调整顺序"></div>
       <div class="status" id="status">正在加载数据…</div>
     </div>
     <div style="display:flex; flex-direction:column; gap:8px;">
@@ -94,12 +93,41 @@ let rows=[],dynSet=new Set(),pickedDynasties=[],customStart=null,customEnd=null;
 async function loadData(){
   try{
     const resp=await fetch(XLSX_URL);if(!resp.ok)throw new Error('无法加载 emperors.xlsx');const buf=await resp.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});
+    rows=[];wb.SheetNames.forEach(sn=>{const ws=wb.Sheets[sn];if(!ws)return;const json=XLSS.utils ? XLSS : XLSX; /* guard */ });
+  }catch(e){/* placeholder to satisfy syntax, real parse below */}
+  try{
+    const resp=await fetch(XLSX_URL);if(!resp.ok)throw new Error('无法加载 emperors.xlsx');const buf=await resp.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});
     rows=[];wb.SheetNames.forEach(sn=>{const ws=wb.Sheets[sn];if(!ws)return;const json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});json.forEach(r=>{const rec={朝代:r['朝代']??'',姓名:r['姓名']??'',常用称呼:r['常用称呼']??'',在位起:parseNum(r['在位起']),在位止:parseNum(r['在位止']),sheet:sn};if(rec.朝代&&rec.姓名)rows.push(rec);});});
     rows.forEach(r=>dynSet.add(r.朝代));const sel=S('#dynSelect');sel.innerHTML='<option value="">选择一个朝代</option>';[...dynSet].sort().forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});S('#status').textContent='加载完成';}
   catch(e){S('#status').textContent='加载失败：'+e.message;}
 }
-function addDyn(){const v=S('#dynSelect').value;if(!v||pickedDynasties.includes(v))return;pickedDynasties.push(v);render();draw();}
-function render(){const c=S('#chips');c.innerHTML='';pickedDynasties.forEach(d=>{const chip=document.createElement('span');chip.className='chip';chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}<button class='rm'>×</button>`;chip.querySelector('.rm').onclick=()=>{pickedDynasties=pickedDynasties.filter(x=>x!==d);render();draw();};c.appendChild(chip);});}
+function addDyn(){const v=S('#dynSelect').value;if(!v||pickedDynasties.includes(v))return;pickedDynasties.push(v);renderChips();draw();}
+function removeDyn(v){pickedDynasties=pickedDynasties.filter(x=>x!==v);renderChips();draw();}
+
+// Drag & Drop reordering for chips
+let dragIndex=null;
+function renderChips(){
+  const wrap=S('#chips'); wrap.innerHTML='';
+  pickedDynasties.forEach((d,idx)=>{
+    const chip=document.createElement('span'); chip.className='chip'; chip.draggable=true; chip.dataset.index=idx;
+    chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}<button class='rm' title='移除'>×</button>`;
+    chip.querySelector('.rm').onclick=()=>removeDyn(d);
+    chip.addEventListener('dragstart', (e)=>{ dragIndex=idx; chip.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+    chip.addEventListener('dragend', ()=>{ chip.classList.remove('dragging'); dragIndex=null; });
+    chip.addEventListener('dragover', (e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; chip.classList.add('drop-hint'); });
+    chip.addEventListener('dragleave', ()=> chip.classList.remove('drop-hint'));
+    chip.addEventListener('drop', (e)=>{
+      e.preventDefault(); chip.classList.remove('drop-hint');
+      const targetIdx = Number(chip.dataset.index);
+      if(dragIndex===null || dragIndex===targetIdx) return;
+      const item = pickedDynasties.splice(dragIndex,1)[0];
+      pickedDynasties.splice(targetIdx,0,item);
+      renderChips(); draw();
+    });
+    wrap.appendChild(chip);
+  });
+}
+
 function applyRange(){customStart=S('#startYear').value?Number(S('#startYear').value):null;customEnd=S('#endYear').value?Number(S('#endYear').value):null;if(customStart!=null&&customEnd!=null&&customStart>customEnd)[customStart,customEnd]=[customEnd,customStart];draw();}
 function clearRange(){customStart=customEnd=null;S('#startYear').value='';S('#endYear').value='';draw();}
 
@@ -137,14 +165,14 @@ function draw(){
       const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
       rect.setAttribute('x',Math.min(x1,x2));rect.setAttribute('y',y);rect.setAttribute('width',Math.max(4,Math.abs(x2-x1)));rect.setAttribute('height',rowH);
       rect.setAttribute('rx',6);rect.setAttribute('fill',hashColor(d));
-      // Add hover tooltip events
       rect.addEventListener('mousemove', (ev)=>{
         showTip(`${alias===r.姓名?alias:`${alias} ${r.姓名}`}<br>${yearLabel(r.在位起)} — ${yearLabel(r.在位止)}`, ev.clientX, ev.clientY);
       });
       rect.addEventListener('mouseleave', hideTip);
       svg.appendChild(rect);
       const outline=document.createElementNS('http://www.w3.org/2000/svg','rect');
-      outline.setAttribute('x',Math.min(x1,x2));outline.setAttribute('y',y);outline.setAttribute('width',Math.max(4,Math.abs(x2-x1)));outline.setAttribute('height',rowH);
+      outline.setAttribute('x',Math.min(x1,x2));outline.setAttribute('y',y);
+      outline.setAttribute('width',Math.max(4,Math.abs(x2-x1)));outline.setAttribute('height',rowH);
       outline.setAttribute('rx',6);outline.setAttribute('class','bar-outline');svg.appendChild(outline);
     });
     cursorY+=groups[d].length*(rowH+gap)+groupGap;
@@ -165,9 +193,8 @@ function draw(){
   }
   S('#result').style.display='';
 }
-S('#btnAdd').onclick=addDyn;S('#btnClear').onclick=()=>{pickedDynasties=[];render();draw();};
+S('#btnAdd').onclick=addDyn;S('#btnClear').onclick=()=>{pickedDynasties=[];renderChips();draw();};
 S('#btnApplyRange').onclick=applyRange;S('#btnClearRange').onclick=clearRange;loadData();
-// Hide tooltip if mouse leaves SVG wrap
 S('#timeline-wrap').addEventListener('mouseleave', hideTip);
 </script>
 </body>
