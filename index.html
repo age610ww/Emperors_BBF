@@ -7,14 +7,13 @@
   <style>
     :root {
       --bg: #ffffff;
-      --text: #111827;   /* gray-900 */
-      --muted: #6b7280;  /* gray-500 */
-      --border: #e5e7eb; /* gray-200 */
-      --chip-bg: #f3f4f6;/* gray-100 */
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --chip-bg: #f3f4f6;
       --chip-border: #e5e7eb;
-      --bar: #3b82f6;    /* blue-500 */
-      --axis: #9ca3af;   /* gray-400 */
-      --group: #1f2937;  /* gray-800 */
+      --axis: #9ca3af;
+      --group: #1f2937;
       --accent: #2563eb;
     }
     *{box-sizing:border-box}
@@ -27,8 +26,8 @@
     .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#111827;color:#fff;font-weight:600;cursor:pointer;}
     .btn.secondary{background:transparent;color:var(--text);}
     .status{margin-top:6px;color:var(--muted);font-size:13px;}
-    .chips{display:flex;flex-wrap:wrap;gap:8px;}
-    .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border); user-select:none;}
+    .chips{display:flex;flex-wrap:wrap;gap:8px; user-select:none;}
+    .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border);}
     .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
     .chip .rm{cursor:pointer;border:none;background:transparent;color:var(--accent);font-weight:700;}
     .chip[draggable="true"]{cursor:grab;}
@@ -93,10 +92,6 @@ let rows=[],dynSet=new Set(),pickedDynasties=[],customStart=null,customEnd=null;
 async function loadData(){
   try{
     const resp=await fetch(XLSX_URL);if(!resp.ok)throw new Error('无法加载 emperors.xlsx');const buf=await resp.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});
-    rows=[];wb.SheetNames.forEach(sn=>{const ws=wb.Sheets[sn];if(!ws)return;const json=XLSS.utils ? XLSS : XLSX; /* guard */ });
-  }catch(e){/* placeholder to satisfy syntax, real parse below */}
-  try{
-    const resp=await fetch(XLSX_URL);if(!resp.ok)throw new Error('无法加载 emperors.xlsx');const buf=await resp.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});
     rows=[];wb.SheetNames.forEach(sn=>{const ws=wb.Sheets[sn];if(!ws)return;const json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});json.forEach(r=>{const rec={朝代:r['朝代']??'',姓名:r['姓名']??'',常用称呼:r['常用称呼']??'',在位起:parseNum(r['在位起']),在位止:parseNum(r['在位止']),sheet:sn};if(rec.朝代&&rec.姓名)rows.push(rec);});});
     rows.forEach(r=>dynSet.add(r.朝代));const sel=S('#dynSelect');sel.innerHTML='<option value="">选择一个朝代</option>';[...dynSet].sort().forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});S('#status').textContent='加载完成';}
   catch(e){S('#status').textContent='加载失败：'+e.message;}
@@ -104,7 +99,7 @@ async function loadData(){
 function addDyn(){const v=S('#dynSelect').value;if(!v||pickedDynasties.includes(v))return;pickedDynasties.push(v);renderChips();draw();}
 function removeDyn(v){pickedDynasties=pickedDynasties.filter(x=>x!==v);renderChips();draw();}
 
-// Drag & Drop reordering for chips
+// Drag & Drop with index correction
 let dragIndex=null;
 function renderChips(){
   const wrap=S('#chips'); wrap.innerHTML='';
@@ -112,7 +107,7 @@ function renderChips(){
     const chip=document.createElement('span'); chip.className='chip'; chip.draggable=true; chip.dataset.index=idx;
     chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}<button class='rm' title='移除'>×</button>`;
     chip.querySelector('.rm').onclick=()=>removeDyn(d);
-    chip.addEventListener('dragstart', (e)=>{ dragIndex=idx; chip.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+    chip.addEventListener('dragstart', (e)=>{ dragIndex=idx; chip.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(idx)); e.dataTransfer.effectAllowed='move'; });
     chip.addEventListener('dragend', ()=>{ chip.classList.remove('dragging'); dragIndex=null; });
     chip.addEventListener('dragover', (e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; chip.classList.add('drop-hint'); });
     chip.addEventListener('dragleave', ()=> chip.classList.remove('drop-hint'));
@@ -121,7 +116,8 @@ function renderChips(){
       const targetIdx = Number(chip.dataset.index);
       if(dragIndex===null || dragIndex===targetIdx) return;
       const item = pickedDynasties.splice(dragIndex,1)[0];
-      pickedDynasties.splice(targetIdx,0,item);
+      const insertIdx = dragIndex < targetIdx ? targetIdx - 1 : targetIdx; // 修正索引偏移
+      pickedDynasties.splice(insertIdx,0,item);
       renderChips(); draw();
     });
     wrap.appendChild(chip);
@@ -131,8 +127,9 @@ function renderChips(){
 function applyRange(){customStart=S('#startYear').value?Number(S('#startYear').value):null;customEnd=S('#endYear').value?Number(S('#endYear').value):null;if(customStart!=null&&customEnd!=null&&customStart>customEnd)[customStart,customEnd]=[customEnd,customStart];draw();}
 function clearRange(){customStart=customEnd=null;S('#startYear').value='';S('#endYear').value='';draw();}
 
-function showTip(html, x, y){const tip=S('#tooltip'); tip.innerHTML=html; tip.style.left=x+'px'; tip.style.top=y+'px'; tip.classList.add('show');}
-function hideTip(){S('#tooltip').classList.remove('show');}
+const tip=S('#tooltip');
+function showTip(html, x, y){ tip.innerHTML=html; tip.style.left=x+'px'; tip.style.top=y+'px'; tip.classList.add('show'); }
+function hideTip(){ tip.classList.remove('show'); }
 
 function draw(){
   const list=rows.filter(r=>pickedDynasties.includes(r.朝代));if(!list.length){S('#result').style.display='none';return;}
@@ -177,7 +174,6 @@ function draw(){
     });
     cursorY+=groups[d].length*(rowH+gap)+groupGap;
   });
-  // Draw axis
   const axisY=H-40;
   const line=document.createElementNS('http://www.w3.org/2000/svg','line');
   line.setAttribute('x1',leftPad);line.setAttribute('x2',W-rightPad);line.setAttribute('y1',axisY);line.setAttribute('y2',axisY);line.setAttribute('class','axis');svg.appendChild(line);
