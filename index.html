@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>中国皇帝时间轴（添加朝代 / 常用称呼+姓名）</title>
+  <title>中国皇帝时间轴（添加朝代 / 自定义时间段）</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -20,10 +20,10 @@
     .sub { color: var(--muted); font-size: 14px; }
     .card { max-width: 1200px; margin: 16px auto; background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01)); border: 1px solid rgba(148,163,184,.2); border-radius: 16px; padding: 16px; }
     .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-    select, input[type="text"]{ width:min(420px, 92vw); padding:10px 12px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#0b1220; color:var(--text); }
+    select, input[type="number"], input[type="text"]{ padding:10px 12px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#0b1220; color:var(--text); }
     .btn{ padding:10px 14px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#60a5fa; color:#07131f; font-weight:600; cursor:pointer; }
     .btn.secondary{ background:transparent; color:var(--text); }
-    .status{ margin-top:6px; color:var(--muted); font-size:13px; }
+    .status{ margin-top:6px; color: var(--muted); font-size:13px; }
     .chips{ display:flex; flex-wrap:wrap; gap:8px; }
     .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:var(--chip); border:1px solid var(--chip-border); }
     .chip .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; }
@@ -38,25 +38,36 @@
     .band{ fill: rgba(148,163,184,.06); }
     #legend{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 0; color:#cbd5e1; font-size:12px; }
     #legend .chip{ padding:2px 8px; }
+    .small { font-size: 12px; color: var(--muted); }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <header>
-  <h1>中国皇帝时间轴（添加朝代 / 常用称呼+姓名）</h1>
-  <div class="sub">把本页面与 <code>emperors.xlsx</code> 放在同一目录。此版本：① 自动读取 <strong>所有工作表</strong>；② 顶部用“添加朝代”方式累积选择多个朝代；③ 左侧标签固定为 <strong>常用称呼（姓名）</strong>。</div>
+  <h1>中国皇帝时间轴（添加朝代 / 自定义时间段）</h1>
+  <div class="sub">把本页面与 <code>emperors.xlsx</code> 放在同一目录。此版本：① 自动读取 <strong>所有工作表</strong>；② 顶部“添加朝代”累积选择多个朝代；③ 左侧标签显示 <strong>常用称呼 姓名</strong>；④ 支持自定义起止年份，仅显示该区间（支持负数=公元前）。</div>
 </header>
 
 <section class="card">
-  <div class="row" style="align-items:flex-start;">
-    <div>
-      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-        <select id="dynSelect"><option value="">加载中…</option></select>
+  <div class="row" style="align-items:flex-start; gap:16px;">
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <select id="dynSelect" style="min-width: 260px;"><option value="">加载中…</option></select>
         <button class="btn" id="btnAdd">添加朝代</button>
         <button class="btn secondary" id="btnClear">清空</button>
       </div>
       <div class="chips" id="chips"></div>
-      <div class="status" id="status" style="margin-top:8px;">正在加载数据…</div>
+      <div class="status" id="status">正在加载数据…</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div class="small">筛选显示的时间段（例如：-221 到 220，表示公元前221年至公元220年）</div>
+      <div class="row" style="gap:8px;">
+        <input id="startYear" type="number" placeholder="起始年，可负数" style="width:160px;">
+        <span class="small">到</span>
+        <input id="endYear" type="number" placeholder="截止年，可负数" style="width:160px;">
+        <button class="btn" id="btnApplyRange">应用时间段</button>
+        <button class="btn secondary" id="btnClearRange">清除时间段</button>
+      </div>
     </div>
   </div>
 </section>
@@ -85,18 +96,21 @@ function hashColor(str){
   const hue = h % 360; const sat = 60 + (h % 20); const light = 50;
   return `hsl(${hue} ${sat}% ${light}%)`;
 }
+function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
 
 let rows=[], dynSet=new Set(), pickedDynasties=[];
+let customStart=null, customEnd=null; // custom range
 
 async function loadAllSheets(){
   try{
-    const resp = await fetch(XLSX_URL);
-    if(!resp.ok) throw new Error('无法加载 '+XLSX_URL);
+    const resp = await fetch(XLSX_URL, {cache: 'no-store'});
+    if(!resp.ok) throw new Error('无法加载 '+XLSX_URL+'（是否与本页面同目录？）');
     const buf = await resp.arrayBuffer();
     const wb = XLSX.read(buf, {type:'array'});
     rows = [];
     wb.SheetNames.forEach(sn=>{
       const ws = wb.Sheets[sn];
+      if(!ws) return;
       const json = XLSX.utils.sheet_to_json(ws, { raw:true, defval:'' });
       json.forEach(r=>{
         const rec = {
@@ -114,12 +128,11 @@ async function loadAllSheets(){
       });
     });
     rows.forEach(r=> dynSet.add(r.朝代));
-    // fill select
     const sel = S('#dynSelect'); sel.innerHTML = '<option value=\"\">选择一个朝代…</option>';
     [...dynSet].sort().forEach(d=>{
       const opt = document.createElement('option'); opt.value=d; opt.textContent=d; sel.appendChild(opt);
     });
-    S('#status').textContent = `已加载 ${rows.length} 条记录，${wb.SheetNames.length} 个工作表。选择一个朝代后点击“添加朝代”。`;
+    S('#status').textContent = `已加载 ${rows.length} 条记录，${wb.SheetNames.length} 个工作表。选择朝代后点“添加朝代”。`;
   }catch(e){
     console.error(e);
     S('#status').innerHTML = `<span style="color:var(--danger)">数据加载失败：</span>${e.message}`;
@@ -144,7 +157,6 @@ function clearAll(){
   renderChips();
   S('#result').style.display='none';
 }
-
 function renderChips(){
   const box = S('#chips'); box.innerHTML='';
   pickedDynasties.forEach(d=>{
@@ -156,11 +168,31 @@ function renderChips(){
   });
 }
 
+function applyRange(){
+  const s = S('#startYear').value.trim();
+  const e = S('#endYear').value.trim();
+  customStart = s === '' ? null : Number(s);
+  customEnd = e === '' ? null : Number(e);
+  if(customStart!=null && customEnd!=null && customStart>customEnd){
+    // swap
+    const tmp = customStart; customStart = customEnd; customEnd = tmp;
+    S('#startYear').value = customStart; S('#endYear').value = customEnd;
+  }
+  draw();
+}
+function clearRange(){
+  customStart = customEnd = null;
+  S('#startYear').value=''; S('#endYear').value='';
+  draw();
+}
+
 function draw(){
   const list = rows.filter(r => pickedDynasties.includes(r.朝代));
   const groupsMap = new Map();
   list.forEach(r=>{
     if(r.在位起==null || r.在位止==null) return;
+    if(customStart!=null && r.在位止 < customStart) return;   // entirely before range
+    if(customEnd!=null && r.在位起 > customEnd) return;       // entirely after range
     if(!groupsMap.has(r.朝代)) groupsMap.set(r.朝代, []);
     groupsMap.get(r.朝代).push(r);
   });
@@ -169,13 +201,15 @@ function draw(){
   groups.forEach(g=>g.rows.sort((a,b)=> (a.在位起 ?? 0) - (b.在位起 ?? 0)));
 
   const all = groups.flatMap(g=>g.rows);
-  const minYear = Math.min(...all.map(r=>r.在位起));
-  const maxYear = Math.max(...all.map(r=>r.在位止));
+  let minYear = Math.min(...all.map(r=>r.在位起));
+  let maxYear = Math.max(...all.map(r=>r.在位止));
+  if(customStart!=null) minYear = Math.max(minYear, customStart);
+  if(customEnd!=null) maxYear = Math.min(maxYear, customEnd);
   const range = Math.max(1, maxYear - minYear);
 
   const wrap = S('#timeline-wrap');
   const W = Math.max(1100, wrap.clientWidth - 2);
-  const leftPad = 180, rightPad = 24, topPad = 24, rowH = 26, gap = 6, groupGap = 18;
+  const leftPad = 200, rightPad = 24, topPad = 24, rowH = 26, gap = 6, groupGap = 18;
   let rowsCount = 0; groups.forEach(g=> rowsCount += g.rows.length);
   const H = topPad + groups.length * 24 + rowsCount * (rowH+gap) + (groups.length-1)*groupGap + 60;
 
@@ -203,14 +237,17 @@ function draw(){
     cursorY += headerH;
     g.rows.forEach((r,i)=>{
       const y = cursorY + i*(rowH+gap);
-      const x1 = scale(r.在位起), x2 = scale(r.在位止);
+      // clamp to custom range for drawing
+      const s = customStart!=null ? clamp(r.在位起, customStart, Infinity) : r.在位起;
+      const e = customEnd!=null ? clamp(r.在位止, -Infinity, customEnd) : r.在位止;
+      const x1 = scale(s), x2 = scale(e);
       const gEl = document.createElementNS('http://www.w3.org/2000/svg','g');
 
       const name = document.createElementNS('http://www.w3.org/2000/svg','text');
       name.setAttribute('x', leftPad - 10); name.setAttribute('y', y + rowH*0.7);
       name.setAttribute('text-anchor','end'); name.setAttribute('class','label');
       const alias = r.常用称呼 || r.姓名;
-      const display = alias === r.姓名 ? alias : `${alias}（${r.姓名}）`; // 常用称呼+姓名
+      const display = alias === r.姓名 ? alias : `${alias} ${r.姓名}`; // 常用称呼 姓名（用空格）
       name.textContent = display;
       gEl.appendChild(name);
 
@@ -265,6 +302,8 @@ function draw(){
 
 S('#btnAdd').addEventListener('click', addDynasty);
 S('#btnClear').addEventListener('click', clearAll);
+S('#btnApplyRange').addEventListener('click', applyRange);
+S('#btnClearRange').addEventListener('click', clearRange);
 
 loadAllSheets();
 </script>
