@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>中国皇帝时间轴（修复版）</title>
+  <title>中国皇帝时间轴（带年份轴）</title>
   <style>
     :root { --bg:#0f172a; --muted:#94a3b8; --text:#e5e7eb; --danger:#ef4444; --chip:#0b1220; --chip-border:rgba(148,163,184,.35); }
     *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
@@ -23,8 +23,8 @@
 </head>
 <body>
 <header>
-  <h1>中国皇帝时间轴（修复版）</h1>
-  <div class="sub">修复了“正则表达式错误”。支持多朝代添加、自定义时间段、显示“常用称呼 姓名”。</div>
+  <h1>中国皇帝时间轴（带年份轴）</h1>
+  <div class="sub">支持多朝代添加、自定义时间段、显示“常用称呼 姓名”，底部带年份刻度。</div>
 </header>
 
 <section class="card">
@@ -61,6 +61,8 @@ const S=(q,e=document)=>e.querySelector(q);
 function parseNum(v){if(v==null||v==='')return null;const s=String(v).trim();if(/^公元?前/.test(s)||/^前/.test(s))return-Number(s.replace(/[^-0-9.]/g,''));if(/BCE/i.test(s))return-Number(s.replace(/[^-0-9.]/g,''));const n=Number(s.replace(/[^-0-9.]/g,''));return isNaN(n)?null:n;}
 function yearLabel(y){if(y==null)return'';return y<0?`公元前${-y}年`:`公元${y}年`;}
 function hashColor(str){let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;const hue=h%360;const sat=60+(h%20);return`hsl(${hue} ${sat}% 50%)`;}
+function niceStep(range){const raw=range/8;const p=Math.pow(10,Math.floor(Math.log10(raw)));const cs=[1,2,5,10].map(k=>k*p);let b=cs[0];for(const c of cs)if(Math.abs(raw-c)<Math.abs(raw-b))b=c;return Math.max(1,Math.round(b));}
+function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n));}
 
 let rows=[],dynSet=new Set(),pickedDynasties=[],customStart=null,customEnd=null;
 async function loadData(){
@@ -74,8 +76,61 @@ function addDyn(){const v=S('#dynSelect').value;if(!v||pickedDynasties.includes(
 function render(){const c=S('#chips');c.innerHTML='';pickedDynasties.forEach(d=>{const chip=document.createElement('span');chip.className='chip';chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}<button class='rm'>×</button>`;chip.querySelector('.rm').onclick=()=>{pickedDynasties=pickedDynasties.filter(x=>x!==d);render();draw();};c.appendChild(chip);});}
 function applyRange(){customStart=S('#startYear').value?Number(S('#startYear').value):null;customEnd=S('#endYear').value?Number(S('#endYear').value):null;if(customStart&&customEnd&&customStart>customEnd)[customStart,customEnd]=[customEnd,customStart];draw();}
 function clearRange(){customStart=customEnd=null;S('#startYear').value='';S('#endYear').value='';draw();}
-function draw(){const list=rows.filter(r=>pickedDynasties.includes(r.朝代));if(!list.length){S('#result').style.display='none';return;}const groups={};list.forEach(r=>{if(r.在位起==null||r.在位止==null)return;if(customStart&&r.在位止<customStart)return;if(customEnd&&r.在位起>customEnd)return;(groups[r.朝代]??=[]).push(r);});const dyns=pickedDynasties.filter(d=>groups[d]);if(!dyns.length){S('#result').style.display='none';return;}dyns.forEach(d=>groups[d].sort((a,b)=>a.在位起-b.在位起));const all=dyns.flatMap(d=>groups[d]);let min=Math.min(...all.map(r=>r.在位起)),max=Math.max(...all.map(r=>r.在位止));if(customStart)min=Math.max(min,customStart);if(customEnd)max=Math.min(max,customEnd);const range=max-min;const svg=S('#timeline');svg.innerHTML='';const left=200,rowH=24,gap=6,top=20;let y=top;dyns.forEach(d=>{const color=hashColor(d);const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',10);t.setAttribute('y',y+10);t.setAttribute('fill','#cbd5e1');t.textContent=d;svg.appendChild(t);y+=20;groups[d].forEach(r=>{const s=Math.max(r.在位起,customStart??-1e9),e=Math.min(r.在位止,customEnd??1e9);const x1=left+(s-min)/range*800,x2=left+(e-min)/range*800;const g=document.createElementNS('http://www.w3.org/2000/svg','g');const name=document.createElementNS('http://www.w3.org/2000/svg','text');name.setAttribute('x',left-10);name.setAttribute('y',y+rowH*0.7);name.setAttribute('text-anchor','end');name.setAttribute('class','label');name.textContent=(r.常用称呼?r.常用称呼+' ':'')+r.姓名;g.appendChild(name);const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('x',x1);rect.setAttribute('y',y);rect.setAttribute('width',Math.max(4,x2-x1));rect.setAttribute('height',rowH);rect.setAttribute('rx',5);rect.setAttribute('fill',color);g.appendChild(rect);svg.appendChild(g);y+=rowH+gap;});y+=10;});svg.setAttribute('height',y+50);S('#result').style.display='';}
-S('#btnAdd').onclick=addDyn;S('#btnClear').onclick=()=>{pickedDynasties=[];render();draw();};S('#btnApplyRange').onclick=applyRange;S('#btnClearRange').onclick=clearRange;loadData();
+function draw(){
+  const list=rows.filter(r=>pickedDynasties.includes(r.朝代));if(!list.length){S('#result').style.display='none';return;}
+  const groups={};list.forEach(r=>{if(r.在位起==null||r.在位止==null)return;if(customStart&&r.在位止<customStart)return;if(customEnd&&r.在位起>customEnd)return;(groups[r.朝代]??=[]).push(r);});
+  const dyns=pickedDynasties.filter(d=>groups[d]);if(!dyns.length){S('#result').style.display='none';return;}
+  dyns.forEach(d=>groups[d].sort((a,b)=>a.在位起-b.在位起));const all=dyns.flatMap(d=>groups[d]);
+  let minYear=Math.min(...all.map(r=>r.在位起));let maxYear=Math.max(...all.map(r=>r.在位止));
+  if(customStart!=null)minYear=Math.max(minYear,customStart);if(customEnd!=null)maxYear=Math.min(maxYear,customEnd);
+  const range=Math.max(1,maxYear-minYear);
+  const wrap=S('#timeline-wrap');const W=Math.max(1100,wrap.clientWidth-2);
+  const leftPad=200,rightPad=24,topPad=24,rowH=26,gap=6,groupGap=18;
+  let rowsCount=0;dyns.forEach(d=>rowsCount+=groups[d].length);
+  const H=topPad+dyns.length*24+rowsCount*(rowH+gap)+(dyns.length-1)*groupGap+80;
+  const scale=y=>leftPad+((y-minYear)/range)*(W-leftPad-rightPad);
+  const svg=S('#timeline');svg.setAttribute('width',W);svg.setAttribute('height',H);svg.innerHTML='';
+  let cursorY=topPad;
+  dyns.forEach(d=>{
+    const headerH=22;
+    const title=document.createElementNS('http://www.w3.org/2000/svg','text');
+    title.setAttribute('x',12);title.setAttribute('y',cursorY+10);title.setAttribute('class','group-title');title.textContent=d;svg.appendChild(title);
+    cursorY+=headerH;
+    groups[d].forEach((r,i)=>{
+      const y=cursorY+i*(rowH+gap);
+      const s=customStart?Math.max(r.在位起,customStart):r.在位起;const e=customEnd?Math.min(r.在位止,customEnd):r.在位止;
+      const x1=scale(s),x2=scale(e);
+      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x',leftPad-10);t.setAttribute('y',y+rowH*0.7);t.setAttribute('text-anchor','end');t.setAttribute('class','label');
+      const alias=r.常用称呼||r.姓名;t.textContent=alias===r.姓名?alias:`${alias} ${r.姓名}`;svg.appendChild(t);
+      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rect.setAttribute('x',Math.min(x1,x2));rect.setAttribute('y',y);rect.setAttribute('width',Math.max(4,Math.abs(x2-x1)));rect.setAttribute('height',rowH);
+      rect.setAttribute('rx',5);rect.setAttribute('fill',hashColor(d));svg.appendChild(rect);
+    });
+    cursorY+=groups[d].length*(rowH+gap)+groupGap;
+  });
+  // Draw year axis
+  const axisY=H-40;
+  const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('x1',leftPad);line.setAttribute('x2',W-rightPad);
+  line.setAttribute('y1',axisY);line.setAttribute('y2',axisY);
+  line.setAttribute('class','axis');svg.appendChild(line);
+  const step=niceStep(range);
+  const startTick=Math.ceil(minYear/step)*step;
+  for(let t=startTick;t<=maxYear;t+=step){
+    const x=scale(t);
+    const tick=document.createElementNS('http://www.w3.org/2000/svg','line');
+    tick.setAttribute('x1',x);tick.setAttribute('x2',x);
+    tick.setAttribute('y1',axisY);tick.setAttribute('y2',axisY+6);
+    tick.setAttribute('class','axis');svg.appendChild(tick);
+    const lbl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    lbl.setAttribute('x',x);lbl.setAttribute('y',axisY+18);lbl.setAttribute('text-anchor','middle');lbl.setAttribute('class','axis');
+    lbl.textContent=t<0?`前${-t}`:`${t}`;svg.appendChild(lbl);
+  }
+  S('#result').style.display='';
+}
+S('#btnAdd').onclick=addDyn;S('#btnClear').onclick=()=>{pickedDynasties=[];render();draw();};
+S('#btnApplyRange').onclick=applyRange;S('#btnClearRange').onclick=clearRange;loadData();
 </script>
 </body>
 </html>
