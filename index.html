@@ -3,13 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>中国皇帝时间轴查询（多 Sheet / 多朝并立）</title>
+  <title>中国皇帝时间轴（添加朝代 / 常用称呼+姓名）</title>
   <style>
     :root {
       --bg: #0f172a;
       --muted: #94a3b8;
       --text: #e5e7eb;
       --danger: #ef4444;
+      --chip: #0b1220;
+      --chip-border: rgba(148,163,184,.35);
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji"; }
@@ -18,11 +20,14 @@
     .sub { color: var(--muted); font-size: 14px; }
     .card { max-width: 1200px; margin: 16px auto; background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01)); border: 1px solid rgba(148,163,184,.2); border-radius: 16px; padding: 16px; }
     .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-    input[type="text"]{ width:min(520px, 92vw); padding:10px 12px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#0b1220; color:var(--text); }
-    .radio{ display:inline-flex; gap:6px; align-items:center; color:var(--muted); font-size:14px; }
+    select, input[type="text"]{ width:min(420px, 92vw); padding:10px 12px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#0b1220; color:var(--text); }
     .btn{ padding:10px 14px; border-radius:12px; border:1px solid rgba(148,163,184,.25); background:#60a5fa; color:#07131f; font-weight:600; cursor:pointer; }
     .btn.secondary{ background:transparent; color:var(--text); }
     .status{ margin-top:6px; color:var(--muted); font-size:13px; }
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+    .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:var(--chip); border:1px solid var(--chip-border); }
+    .chip .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; }
+    .chip .rm{ cursor:pointer; border:none; background:transparent; color:#93c5fd; font-weight:700; }
     #timeline-wrap{ width:100%; overflow-x:auto; }
     svg{ width:100%; height:auto; display:block; }
     .axis text{ fill:var(--muted); font-size:12px; }
@@ -31,34 +36,34 @@
     .bar-outline{ stroke:rgba(255,255,255,.55); stroke-width:.4; fill:none; }
     .group-title{ fill:#cbd5e1; font-size:13px; font-weight:700; }
     .band{ fill: rgba(148,163,184,.06); }
-    .legend{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 0; color:#cbd5e1; font-size:12px; }
-    .chip{ display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; border:1px solid rgba(148,163,184,.25); }
-    .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; }
+    #legend{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 0; color:#cbd5e1; font-size:12px; }
+    #legend .chip{ padding:2px 8px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <header>
-  <h1>中国皇帝时间轴查询（多 Sheet / 多朝并立）</h1>
-  <div class="sub">将 <code>index.html</code> 与 <code>emperors.xlsx</code> 放在同一目录。该版本会读取 <strong>所有工作表</strong> 的数据并合并。支持输入多个朝代（以空格、顿号、逗号分隔）进行并立时间轴展示；也支持按姓名定位并高亮。</div>
+  <h1>中国皇帝时间轴（添加朝代 / 常用称呼+姓名）</h1>
+  <div class="sub">把本页面与 <code>emperors.xlsx</code> 放在同一目录。此版本：① 自动读取 <strong>所有工作表</strong>；② 顶部用“添加朝代”方式累积选择多个朝代；③ 左侧标签固定为 <strong>常用称呼（姓名）</strong>。</div>
 </header>
 
 <section class="card">
-  <div class="row">
-    <input id="q" type="text" placeholder="按朝代：汉 唐 宋 | 按姓名：刘秀、赵匡胤…" list="suggestions"/>
-    <datalist id="suggestions"></datalist>
-    <label class="radio"><input type="radio" name="mode" value="dynasty" checked>按朝代（可多选）</label>
-    <label class="radio"><input type="radio" name="mode" value="name">按姓名</label>
-    <button class="btn" id="btnSearch">查询</button>
-    <button class="btn secondary" id="btnReset">重置</button>
+  <div class="row" style="align-items:flex-start;">
+    <div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+        <select id="dynSelect"><option value="">加载中…</option></select>
+        <button class="btn" id="btnAdd">添加朝代</button>
+        <button class="btn secondary" id="btnClear">清空</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="status" id="status" style="margin-top:8px;">正在加载数据…</div>
+    </div>
   </div>
-  <div class="status" id="status">正在加载数据…</div>
 </section>
 
 <section class="card" id="result" style="display:none">
-  <div id="summary" class="legend"></div>
   <div id="timeline-wrap"><svg id="timeline" role="img" aria-label="在位时间轴"></svg></div>
-  <div class="legend" id="legend"></div>
+  <div id="legend"></div>
 </section>
 
 <script>
@@ -70,21 +75,18 @@ function parseNum(v){
   const s = String(v).trim();
   if (/^公元?前/.test(s) || /^前/.test(s)) return -Number(s.replace(/[^0-9.]/g,''));
   if (/BCE/i.test(s)) return -Number(s.replace(/[^0-9.]/g,''));
-  const n = Number(s.replace(/[^\-0-9.]/g,''));
+  const n = Number(s.replace(/[^\\-0-9.]/g,''));
   return isNaN(n) ? null : n;
 }
 function yearLabel(y){ if(y==null) return ''; return y<0?`公元前${-y}年`:`公元${y}年`; }
 function niceStep(range){ const raw=range/8; const p=Math.pow(10,Math.floor(Math.log10(raw))); const cs=[1,2,5,10].map(k=>k*p); let b=cs[0]; for(const c of cs) if(Math.abs(raw-c)<Math.abs(raw-b)) b=c; return Math.max(1,Math.round(b)); }
 function hashColor(str){
-  // 生成稳定 HSL 色；避免太浅
   let h=0; for(let i=0;i<str.length;i++) h = (h*31 + str.charCodeAt(i))>>>0;
-  const hue = h % 360;
-  const sat = 60 + (h % 20); // 60-79
-  const light = 50; // 中等亮度
+  const hue = h % 360; const sat = 60 + (h % 20); const light = 50;
   return `hsl(${hue} ${sat}% ${light}%)`;
 }
 
-let rows=[], dynSet=new Set(), nameSet=new Set();
+let rows=[], dynSet=new Set(), pickedDynasties=[];
 
 async function loadAllSheets(){
   try{
@@ -111,53 +113,59 @@ async function loadAllSheets(){
         if(rec.朝代 && rec.姓名) rows.push(rec);
       });
     });
-    rows.forEach(r=>{ dynSet.add(r.朝代); nameSet.add(r.姓名); if(r.常用称呼) nameSet.add(r.常用称呼); });
-    fillSuggestions();
-    S('#status').textContent = `已从 ${wb.SheetNames.length} 个工作表加载 ${rows.length} 条记录。`;
+    rows.forEach(r=> dynSet.add(r.朝代));
+    // fill select
+    const sel = S('#dynSelect'); sel.innerHTML = '<option value=\"\">选择一个朝代…</option>';
+    [...dynSet].sort().forEach(d=>{
+      const opt = document.createElement('option'); opt.value=d; opt.textContent=d; sel.appendChild(opt);
+    });
+    S('#status').textContent = `已加载 ${rows.length} 条记录，${wb.SheetNames.length} 个工作表。选择一个朝代后点击“添加朝代”。`;
   }catch(e){
     console.error(e);
     S('#status').innerHTML = `<span style="color:var(--danger)">数据加载失败：</span>${e.message}`;
   }
 }
 
-function fillSuggestions(){
-  const dl = S('#suggestions'); dl.innerHTML='';
-  [...dynSet].sort().forEach(d=>{ const o=document.createElement('option'); o.value=d; dl.appendChild(o); });
-  [...nameSet].sort().forEach(n=>{ const o=document.createElement('option'); o.value=n; dl.appendChild(o); });
+function addDynasty(){
+  const v = S('#dynSelect').value;
+  if(!v) return;
+  if(pickedDynasties.includes(v)) return;
+  pickedDynasties.push(v);
+  renderChips();
+  draw();
+}
+function removeDynasty(v){
+  pickedDynasties = pickedDynasties.filter(x=>x!==v);
+  renderChips();
+  draw();
+}
+function clearAll(){
+  pickedDynasties = [];
+  renderChips();
+  S('#result').style.display='none';
 }
 
-function parseTokens(str){
-  return str.split(/[\s,，、;；]+/).map(s=>s.trim()).filter(Boolean);
+function renderChips(){
+  const box = S('#chips'); box.innerHTML='';
+  pickedDynasties.forEach(d=>{
+    const chip = document.createElement('span'); chip.className='chip';
+    const dot = document.createElement('span'); dot.className='dot'; dot.style.background=hashColor(d);
+    const label = document.createElement('span'); label.textContent=d;
+    const rm = document.createElement('button'); rm.className='rm'; rm.textContent='×'; rm.title='移除'; rm.onclick=()=>removeDynasty(d);
+    chip.appendChild(dot); chip.appendChild(label); chip.appendChild(rm); box.appendChild(chip);
+  });
 }
 
-function search(){
-  const q = S('#q').value.trim();
-  const mode = document.querySelector('input[name="mode"]:checked').value;
-  if(!q){ S('#status').textContent='请输入内容后查询'; return; }
-  if(mode==='dynasty'){
-    const toks = parseTokens(q);
-    const list = rows.filter(r => toks.some(t => r.朝代.includes(t)));
-    if(!list.length){ S('#status').textContent = `未找到与“${q}”匹配的朝代`; S('#result').style.display='none'; return; }
-    drawParallel(list, toks);
-  }else{
-    const person = rows.find(r => r.姓名.includes(q) || (r.常用称呼 && r.常用称呼.includes(q)));
-    if(!person){ S('#status').textContent=`未找到姓名包含“${q}”的记录`; S('#result').style.display='none'; return; }
-    const list = rows.filter(r => r.朝代===person.朝代);
-    drawParallel(list, [person.朝代], q);
-  }
-}
-
-function drawParallel(list, dynTokens, focusName){
+function draw(){
+  const list = rows.filter(r => pickedDynasties.includes(r.朝代));
   const groupsMap = new Map();
   list.forEach(r=>{
     if(r.在位起==null || r.在位止==null) return;
     if(!groupsMap.has(r.朝代)) groupsMap.set(r.朝代, []);
     groupsMap.get(r.朝代).push(r);
   });
-  // 只保留用户输入的顺序（若提供），并追加其他匹配到的朝代
-  const dynOrder = [...new Set([...(dynTokens||[]), ...groupsMap.keys()])];
-  const groups = dynOrder.filter(d=>groupsMap.has(d)).map(d=>({ dynasty:d, rows:groupsMap.get(d) }));
-  if(groups.length===0){ S('#status').textContent='该查询下没有完整年份的数据。'; S('#result').style.display='none'; return; }
+  const groups = pickedDynasties.filter(d=>groupsMap.has(d)).map(d=>({ dynasty:d, rows:groupsMap.get(d)}));
+  if(groups.length===0){ S('#result').style.display='none'; return; }
   groups.forEach(g=>g.rows.sort((a,b)=> (a.在位起 ?? 0) - (b.在位起 ?? 0)));
 
   const all = groups.flatMap(g=>g.rows);
@@ -167,10 +175,8 @@ function drawParallel(list, dynTokens, focusName){
 
   const wrap = S('#timeline-wrap');
   const W = Math.max(1100, wrap.clientWidth - 2);
-  const leftPad = 140, rightPad = 24, topPad = 24, rowH = 26, gap = 6, groupGap = 18;
-  // total height = groups with header bands
-  let rowsCount = 0;
-  groups.forEach(g=> rowsCount += g.rows.length);
+  const leftPad = 180, rightPad = 24, topPad = 24, rowH = 26, gap = 6, groupGap = 18;
+  let rowsCount = 0; groups.forEach(g=> rowsCount += g.rows.length);
   const H = topPad + groups.length * 24 + rowsCount * (rowH+gap) + (groups.length-1)*groupGap + 60;
 
   const scale = y => leftPad + ((y - minYear)/range) * (W - leftPad - rightPad);
@@ -179,27 +185,22 @@ function drawParallel(list, dynTokens, focusName){
   let cursorY = topPad;
   const legend = S('#legend'); legend.innerHTML='';
   groups.forEach(g=>{
-    // group header band
     const headerH = 22;
     const band = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     band.setAttribute('x', 8); band.setAttribute('y', cursorY-6);
     band.setAttribute('width', W-16); band.setAttribute('height', headerH+6);
-    band.setAttribute('class','band');
-    svg.appendChild(band);
+    band.setAttribute('class','band'); svg.appendChild(band);
 
     const title = document.createElementNS('http://www.w3.org/2000/svg','text');
     title.setAttribute('x', 12); title.setAttribute('y', cursorY+10);
-    title.setAttribute('class','group-title');
-    title.textContent = g.dynasty;
-    svg.appendChild(title);
+    title.setAttribute('class','group-title'); title.textContent = g.dynasty; svg.appendChild(title);
 
-    // legend chip
     const chip = document.createElement('span'); chip.className='chip';
     const dot = document.createElement('span'); dot.className='dot'; dot.style.background = hashColor(g.dynasty);
     const label = document.createElement('span'); label.textContent = g.dynasty;
     chip.appendChild(dot); chip.appendChild(label); legend.appendChild(chip);
 
-    cursorY += headerH; // move below header
+    cursorY += headerH;
     g.rows.forEach((r,i)=>{
       const y = cursorY + i*(rowH+gap);
       const x1 = scale(r.在位起), x2 = scale(r.在位止);
@@ -208,9 +209,9 @@ function drawParallel(list, dynTokens, focusName){
       const name = document.createElementNS('http://www.w3.org/2000/svg','text');
       name.setAttribute('x', leftPad - 10); name.setAttribute('y', y + rowH*0.7);
       name.setAttribute('text-anchor','end'); name.setAttribute('class','label');
-      const display = r.常用称呼 || r.姓名;
-      const extra = [r.庙号, r.谥号].filter(Boolean).join(' ');
-      name.textContent = extra ? `${display}（${extra}）` : display;
+      const alias = r.常用称呼 || r.姓名;
+      const display = alias === r.姓名 ? alias : `${alias}（${r.姓名}）`; // 常用称呼+姓名
+      name.textContent = display;
       gEl.appendChild(name);
 
       const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -220,9 +221,6 @@ function drawParallel(list, dynTokens, focusName){
       rect.setAttribute('height', rowH);
       rect.setAttribute('rx', 5);
       rect.setAttribute('fill', hashColor(g.dynasty));
-      if(focusName && (r.姓名.includes(focusName) || (r.常用称呼 && r.常用称呼.includes(focusName)))){
-        rect.setAttribute('stroke','#22c55e'); rect.setAttribute('stroke-width','2');
-      }
       gEl.appendChild(rect);
 
       const outline = document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -231,8 +229,7 @@ function drawParallel(list, dynTokens, focusName){
       outline.setAttribute('width', Math.max(4, Math.abs(x2-x1)));
       outline.setAttribute('height', rowH);
       outline.setAttribute('rx', 5);
-      outline.setAttribute('class','bar-outline');
-      gEl.appendChild(outline);
+      outline.setAttribute('class','bar-outline'); gEl.appendChild(outline);
 
       const tip = document.createElementNS('http://www.w3.org/2000/svg','title');
       tip.textContent = `${r.朝代}·${r.姓名}${r.常用称呼?`（${r.常用称呼}）`:''}\n${yearLabel(r.在位起)} — ${yearLabel(r.在位止)}\n来源表：${r.sheet}`;
@@ -243,7 +240,6 @@ function drawParallel(list, dynTokens, focusName){
     cursorY += g.rows.length*(rowH+gap) + groupGap;
   });
 
-  // axis
   const axisY = H-40;
   const line = document.createElementNS('http://www.w3.org/2000/svg','line');
   line.setAttribute('x1', leftPad); line.setAttribute('x2', W- rightPad);
@@ -264,14 +260,11 @@ function drawParallel(list, dynTokens, focusName){
     lbl.textContent = t<0?`前${-t}`:`${t}`; svg.appendChild(lbl);
   }
 
-  S('#summary').textContent = `范围：${yearLabel(minYear)} 至 ${yearLabel(maxYear)} · 共 ${groups.reduce((a,g)=>a+g.rows.length,0)} 位 · 朝代：${groups.map(g=>g.dynasty).join('、')}`;
   S('#result').style.display='';
-  S('#status').textContent = '查询完成';
 }
 
-S('#btnSearch').addEventListener('click', search);
-S('#btnReset').addEventListener('click', ()=>{ S('#q').value=''; S('#result').style.display='none'; S('#status').textContent='已重置'; });
-S('#q').addEventListener('keydown', e=>{ if(e.key==='Enter') search(); });
+S('#btnAdd').addEventListener('click', addDynasty);
+S('#btnClear').addEventListener('click', clearAll);
 
 loadAllSheets();
 </script>
