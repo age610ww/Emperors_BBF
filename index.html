@@ -1,59 +1,59 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>皇帝时间轴（极简·显示修复）</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>皇帝时间轴（极简稳健版）</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
-.bar{height:14px;border-radius:9999px;opacity:.95;position:absolute}
-.bar-label{position:absolute;transform:translateX(-50%);font-size:11px;white-space:nowrap;color:#111827;pointer-events:none}
-.handle{cursor:grab}
-.badge{background:#fff;border:1px solid #e5e7eb;color:#111827;padding:2px 6px;border-radius:999px;font-size:12px}
-.hint{display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:12px;height:64px}
+  .bar{height:14px;border-radius:9999px;opacity:.95;position:absolute}
+  .bar-label{position:absolute;transform:translateX(-50%);font-size:11px;white-space:nowrap;color:#111827;pointer-events:none}
+  .handle{cursor:grab}
+  .badge{background:#fff;border:1px solid #e5e7eb;color:#111827;padding:2px 6px;border-radius:999px;font-size:12px}
+  .hint{display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:12px;height:64px}
 </style>
 </head>
 <body class="bg-neutral-50 text-neutral-800">
 <main class="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
+  <header>
+    <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴</h1>
+    <p class="text-neutral-500 text-sm">滚轮缩放（以鼠标为中心）；添加式选择朝代；搜索/清空/拖拽排序；条下方居中标签；无外部刻度/滚动条。</p>
+  </header>
 
-<header class="mb-1">
-  <h1 class="text-2xl sm:text-3xl font-bold">皇帝时间轴</h1>
-  <p class="text-neutral-500 text-sm">滚轮缩放（以鼠标为中心）；添加式选择朝代；搜索、清空、拖拽排序；自动分轨防重叠。</p>
-</header>
+  <section class="bg-white border rounded-xl p-4 space-y-3">
+    <div id="loadState" class="text-sm text-neutral-500">正在读取 <code>emperors.xlsx</code> …</div>
+    <div class="grid sm:grid-cols-3 gap-3 items-end">
+      <div>
+        <label class="text-sm text-neutral-600">选择朝代（或“全部”）</label>
+        <select id="dynSelect" class="mt-1 w-full px-3 py-2 border rounded-lg"></select>
+      </div>
+      <div class="flex gap-2">
+        <button id="addDyn" class="px-3 py-2 rounded-md bg-blue-600 text-white w-full">添加到时间轴</button>
+        <button id="clearDyn" class="px-3 py-2 rounded-md border bg-white w-full">清空</button>
+      </div>
+      <div>
+        <label class="text-sm text-neutral-600">搜索人物（可选）</label>
+        <input id="q" class="mt-1 w-full px-3 py-2 border rounded-lg" placeholder="输入姓名/称呼 过滤已添加朝代"/>
+      </div>
+    </div>
+    <div id="activeDyns" class="flex flex-wrap gap-2"></div>
+    <div id="err" class="text-sm text-red-600 hidden"></div>
+  </section>
 
-<section class="bg-white border rounded-xl p-4 space-y-3">
-  <div class="grid sm:grid-cols-3 gap-3 items-end">
-    <div>
-      <label class="text-sm text-neutral-600">选择朝代（或“全部”）</label>
-      <select id="dynSelect" class="mt-1 w-full px-3 py-2 border rounded-lg"></select>
+  <section class="bg-white border rounded-xl p-4">
+    <div class="grid" style="grid-template-columns:200px 1fr;">
+      <div class="bg-neutral-50 border-r">
+        <div class="h-8 flex items-center px-3 text-xs text-neutral-500 border-b">朝代（可拖拽排序）</div>
+        <div id="dynList"></div>
+      </div>
+      <div id="tracksBox" class="relative min-h-[240px]">
+        <div id="tracksCanvas" class="relative w-full"></div>
+        <div id="emptyHint" class="hint absolute inset-0 pointer-events-none">未选择任何朝代。请在上方选择并点击“添加到时间轴”，或点击“全部”。</div>
+      </div>
     </div>
-    <div class="flex gap-2">
-      <button id="addDyn" class="px-3 py-2 rounded-md bg-blue-600 text-white w-full">添加到时间轴</button>
-      <button id="clearDyn" class="px-3 py-2 rounded-md border bg-white w-full">清空</button>
-    </div>
-    <div>
-      <label class="text-sm text-neutral-600">搜索人物（可选）</label>
-      <input id="q" class="mt-1 w-full px-3 py-2 border rounded-lg" placeholder="对已添加朝代进行人物过滤"/>
-    </div>
-  </div>
-  <div id="activeDyns" class="flex flex-wrap gap-2"></div>
-</section>
-
-<section class="bg-white border rounded-xl p-4">
-  <div class="grid" style="grid-template-columns:200px 1fr;">
-    <div class="bg-neutral-50 border-r">
-      <div class="h-8 flex items-center px-3 text-xs text-neutral-500 border-b">朝代（可拖拽排序）</div>
-      <div id="dynList"></div>
-    </div>
-    <div class="relative min-h-[200px]">
-      <div id="tracksCanvas" class="relative w-full"></div>
-      <div id="emptyHint" class="hint absolute inset-0 pointer-events-none">未选择朝代：请在上方选择并点击“添加到时间轴”，或点击“全部”。</div>
-    </div>
-  </div>
-</section>
-
-<footer class="text-center text-xs text-neutral-400 py-6">© 极简版 · 条下方标签</footer>
+  </section>
 </main>
 
 <script>
@@ -63,38 +63,49 @@
     global:{min:0,max:1,span:1},
   };
   const $=s=>document.querySelector(s);
-  const dynList=$('#dynList'), canvas=$('#tracksCanvas'), emptyHint=$('#emptyHint');
-  const qInput=$('#q'), activeDyns=$('#activeDyns'), dynSelect=$('#dynSelect');
+  const dynList=$('#dynList'), canvas=$('#tracksCanvas'), box=$('#tracksBox');
+  const emptyHint=$('#emptyHint'), dynSelect=$('#dynSelect'), loadState=$('#loadState'), err=$('#err');
+  const qInput=$('#q'), activeDyns=$('#activeDyns');
   const palette=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
 
-  function parseYM(v){ if(v==null) return; const t=String(v).trim(); if(!t) return;
-    let m=t.match(/^([+\-]?\d{1,5})\s*(?:[\/.年\-–—]\s*(\d{1,2}))?\s*(?:月)?$/);
-    if(m){ const y=parseInt(m[1],10); const mo=m[2]?Math.max(1,Math.min(12,parseInt(m[2],10))):undefined; return {y,m:mo}; }
-    let m2=t.match(/^公元前\s*(\d{1,5})(?:[年\-\/.]\s*(\d{1,2}))?/);
-    if(m2){ const y=-parseInt(m2[1],10); const mo=m2[2]?Math.max(1,Math.min(12,parseInt(m2[2],10))):undefined; return {y,m:mo}; }
-  }
-  const ymToFloat=ym=> ym? ym.y + (ym.m? (ym.m-1)/12 : 0) : undefined;
-  const fmtYM=ym=>!ym?'?':(ym.y<0?(ym.m?`公元前${Math.abs(ym.y)}-${String(ym.m).padStart(2,'0')}`:`公元前${Math.abs(ym.y)}`):(ym.m?`${ym.y}-${String(ym.m).padStart(2,'0')}`:String(ym.y)));
-  const H=s=>String(s||'').trim();
-
+  // ---------- 读取与解析 ----------
   async function loadXLSX(){
-    const res=await fetch('./emperors.xlsx?ts='+Date.now(),{cache:'no-store'});
-    if(!res.ok){ alert('未找到 emperors.xlsx'); return; }
-    const buf=await res.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array'});
-    const rows=[];
-    wb.SheetNames.forEach(n=>{
-      const ws=wb.Sheets[n]; if(!ws) return;
-      const list=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
-      list.forEach(r=>rows.push(r));
-    });
-    S.rows=rows;
-    normalize();
-    initDynSelect();
-    // 👉 默认自动添加“全部”，避免空白
-    S.dynData.forEach(d=>S.selected.add(d.dynasty));
-    renderAll();
+    try{
+      const res=await fetch('./emperors.xlsx',{cache:'no-store'});
+      if(!res.ok) throw new Error('未找到 emperors.xlsx，请确认与 HTML 在同一目录。');
+      const buf=await res.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array'});
+      const rows=[];
+      wb.SheetNames.forEach(n=>{
+        const ws=wb.Sheets[n]; if(!ws) return;
+        const list=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+        list.forEach(r=>rows.push(r));
+      });
+      S.rows=rows;
+      normalize();
+      initDynSelect();
+      // 默认添加全部，避免空白
+      S.dynData.forEach(d=>S.selected.add(d.dynasty));
+      renderAll();
+      loadState.textContent='已加载数据。';
+    }catch(e){
+      err.textContent=e.message;
+      err.classList.remove('hidden');
+      loadState.textContent='';
+      console.error(e);
+    }
   }
+
+  function H(x){ return String(x||'').trim(); }
+  function parseYM(v){
+    if(v==null) return; const t=H(v); if(!t) return;
+    let m=t.match(/^([+\-]?\d{1,5})\s*(?:[\/.年\-–—]\s*(\d{1,2}))?\s*(?:月)?$/);
+    if(m){ const y=parseInt(m[1],10); const mo=m[2]?Math.max(1,Math.min(12,parseInt(m[2],10))):void 0; return {y,m:mo}; }
+    let m2=t.match(/^公元前\s*(\d{1,5})(?:[年\-\/.]\s*(\d{1,2}))?/);
+    if(m2){ const y=-parseInt(m2[1],10); const mo=m2[2]?Math.max(1,Math.min(12,parseInt(m2[2],10))):void 0; return {y,m:mo}; }
+  }
+  const ymToFloat=ym=> ym? ym.y + (ym.m? (ym.m-1)/12 : 0) : void 0;
+  const fmtYM=ym=>!ym?'?':(ym.y<0?(ym.m?`公元前${Math.abs(ym.y)}-${String(ym.m).padStart(2,'0')}`:`公元前${Math.abs(ym.y)}`):(ym.m?`${ym.y}-${String(ym.m).padStart(2,'0')}`:String(ym.y)));
 
   function normalize(){
     const map=new Map();
@@ -111,6 +122,7 @@
     S.dynData=dyns.map(d=>{
       const color=palette[(ci++)%palette.length];
       const items=map.get(d).sort((a,b)=>a.sF-b.sF);
+      // 贪心装箱避免重叠
       const lanes=[]; items.forEach(it=>{
         let placed=false;
         for(const ln of lanes){
@@ -125,10 +137,11 @@
     });
     const nums=[]; S.dynData.forEach(p=>{nums.push(p.min,p.max);});
     S.global.min=Math.min(...nums); S.global.max=Math.max(...nums);
-    S.global.span=S.global.max-S.global.min || 1;
+    S.global.span=(S.global.max - S.global.min) || 1;
     if(!S.order.length) S.order=S.dynData.map(x=>x.dynasty);
   }
 
+  // ---------- 控件 ----------
   function initDynSelect(){
     dynSelect.innerHTML='';
     const optAll=document.createElement('option'); optAll.value='__ALL__'; optAll.textContent='全部（添加所有朝代）'; dynSelect.appendChild(optAll);
@@ -148,18 +161,17 @@
     });
   }
 
-  // 保底：若 canvas 宽度算出来是 0，退化用其父容器宽度
+  // ---------- 尺寸辅助（修复 0 宽） ----------
   function canvasWidth(){
-    let w = canvas.clientWidth;
-    if(!w && canvas.parentElement) w = canvas.parentElement.clientWidth || 800;
+    let w = canvas.getBoundingClientRect().width;
+    if(!w) w = box.getBoundingClientRect().width || canvas.parentElement?.clientWidth || 1000;
     return w;
   }
-
   function xOf(year){ const w=canvasWidth(); return (year - S.global.min) / (S.global.span||1) * w; }
   function yearOf(x){ const w=canvasWidth(); return x / (w||1) * (S.global.span||1) + S.global.min; }
 
   function filteredDyns(){
-    const q=String(qInput.value||'').trim().toLowerCase();
+    const q=(qInput.value||'').trim().toLowerCase();
     const arr = S.order.filter(n=>S.selected.has(n)).map(n=>S.dynData.find(d=>d.dynasty===n)).filter(Boolean);
     if(!q) return arr;
     return arr.map(d=>{
@@ -168,6 +180,7 @@
     }).filter(d=>d.items.length);
   }
 
+  // ---------- 渲染 ----------
   function renderTimeline(){
     canvas.innerHTML='';
     dynList.innerHTML='';
@@ -221,6 +234,7 @@
     });
   }
 
+  // ---------- 缩放（以鼠标为中心） ----------
   function attachWheelZoom(el){
     el.addEventListener('wheel',(e)=>{
       e.preventDefault();
@@ -241,9 +255,9 @@
     }, {passive:false});
   }
 
-  // 事件
+  // ---------- 事件 ----------
   $('#addDyn').onclick=()=>{
-    const v=dynSelect.value; 
+    const v=dynSelect.value;
     if(v==='__ALL__'){ S.dynData.forEach(d=>S.selected.add(d.dynasty)); }
     else if(v){ S.selected.add(v); }
     renderAll();
@@ -251,7 +265,11 @@
   $('#clearDyn').onclick=()=>{ S.selected.clear(); renderAll(); };
   qInput.oninput=()=>renderAll();
 
-  attachWheelZoom(canvas);
+  // 尺寸变化时重绘（避免初始 0 宽）
+  const ro = new ResizeObserver(()=> renderTimeline());
+  ro.observe(box);
+
+  attachWheelZoom(box);
   loadXLSX();
 
   function renderAll(){ renderActiveDynChips(); renderTimeline(); }
