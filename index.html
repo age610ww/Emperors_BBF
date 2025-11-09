@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>中国皇帝时间轴（每朝配色·冻结左栏·零时长可见）</title>
+<title>中国皇帝时间轴（冻结左栏·每朝配色·最小宽度增强·边框与提示·刻度1年）</title>
 <style>
 :root{--bg:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--axis:#9ca3af;--grid-v:#e5e7eb;--grid-h:#f3f4f6;}
 *{box-sizing:border-box}
@@ -24,8 +24,7 @@ input[type=range]{width:220px}
 .axis line{stroke:var(--axis)}
 .grid-v{stroke:var(--grid-v);stroke-width:1;opacity:.7}
 .grid-h{stroke:var(--grid-h);stroke-width:1;opacity:.9}
-.bar-outline{stroke:rgba(0,0,0,.18);stroke-width:.6;fill:none}
-/* 冻结左列 + 可横向滚动的右侧 */
+.bar-outline{stroke:rgba(0,0,0,.2);stroke-width:.6;fill:none}
 .timeline-shell{display:grid;grid-template-columns:220px 1fr;gap:0;align-items:start}
 .labels-col{position:sticky;left:0;background:#fff;border-right:1px solid var(--border);z-index:5}
 .scroll-col{overflow-x:auto;overflow-y:hidden}
@@ -35,6 +34,8 @@ svg{display:block;background:#fff}
 .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
 .chip .rm{cursor:pointer;border:none;background:transparent;color:#2563eb;font-weight:700}
 .small{font-size:12px;color:var(--muted)}
+/* tooltip */
+#tip{position:fixed;display:none;background:#111827;color:#fff;padding:6px 8px;border-radius:8px;font-size:12px;pointer-events:none;z-index:10}
 </style>
 </head>
 <body>
@@ -65,20 +66,16 @@ svg{display:block;background:#fff}
         <label><input id="autoPick" type="checkbox" checked> 自动选朝代</label>
         <label><input id="showGrid" type="checkbox" checked> 显示网格</label>
         <label><input id="showEra" type="checkbox" checked> 显示年号</label>
-      </div>
-      <div class="row">
-        <span class="small">缩放</span><input id="zoom" type="range" min="1" max="4" step="0.1" value="1"><span id="zoomVal" class="small">1.0×</span>
         <span class="small" style="margin-left:16px">默认色：皇帝</span><span class="small" style="background:#a78bfa;padding:0 8px;border-radius:6px;color:#111">浅紫</span>
         <span class="small">年号</span><span class="small" style="background:#fde68a;padding:0 8px;border-radius:6px;color:#111">浅黄</span>
       </div>
       <div class="row">
-        <span class="small">选择要调整的朝代</span>
-        <select id="editDyn" style="min-width:220px"></select>
+        <span class="small">当前正在调整：</span><strong id="editingName" class="small">（尚未添加朝代）</strong>
         <span class="small">皇帝色</span><input id="editEmp" type="color" value="#a78bfa">
         <span class="small">年号色</span><input id="editEra" type="color" value="#fde68a">
-        <button class="btn secondary" id="resetDyn">还原该朝默认色</button>
+        <span class="small">缩放</span><input id="zoom" type="range" min="1" max="4" step="0.1" value="1"><span id="zoomVal" class="small">1.0×</span>
       </div>
-      <div class="small">仅对“选择的朝代”显示并修改配色；其他朝代使用默认配色（皇帝浅紫、年号浅黄）。</div>
+      <div class="small">提示：添加某个朝代后即自动成为“当前调整对象”，只显示并修改该朝代的颜色；其他朝代使用默认色（皇帝浅紫、年号浅黄）。</div>
     </div>
   </div>
 </section>
@@ -89,6 +86,8 @@ svg{display:block;background:#fff}
     <div class="scroll-col"><div id="scrollInner"><svg id="barsSvg"></svg></div></div>
   </div>
 </section>
+
+<div id="tip"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -101,9 +100,8 @@ function parseYearPiece(str){var s=String(str||'').trim();if(s==='')return[null,
 function startAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*((m-1)/12)}
 function endAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*(m/12)}
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
-function niceStep(range){var raw=range/8;var p=Math.pow(10,Math.floor(Math.log10(raw)));var cs=[1,2,5,10].map(function(k){return k*p});var b=cs[0];for(var i=0;i<cs.length;i++)if(Math.abs(raw-cs[i])<Math.abs(raw-b))b=cs[i];return Math.max(1,Math.round(b))}
-function hslToHex(h,s,l){h/=360;s/=100;l/=100;function f(n){var k=(n+h/30)%12,a=l-s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));return Math.round(255*a).toString(16).padStart(2,'0')}return '#'+f(0)+f(8)+f(4)}
-function paletteColor(i){var hue=(i*137.508)%360;return hslToHex(hue,45,64)} // 柔和一点
+function darken(hex, amt){try{var c=hex.replace('#',''); if(c.length===3){c=c.split('').map(x=>x+x).join('')} var r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16); r=Math.max(0,Math.min(255,r+amt)); g=Math.max(0,Math.min(255,g+amt)); b=Math.max(0,Math.min(255,b+amt)); return '#'+r.toString(16).padStart(2,'0')+g.toString(16).padStart(2,'0')+b.toString(16).padStart(2,'0');}catch(e){return hex;}}
+function yearsSpan(s,e){return (e - s).toFixed(1).replace(/\\.0$/,'');}
 
 // ===== state
 var rows=[], dynSet={}, pickedDynasties=[], dynRangeMap={}, eras=[];
@@ -111,6 +109,7 @@ var customStart=null, customEnd=null, zoom=1;
 var dynEmpColorDefault='#a78bfa', dynEraColorDefault='#fde68a';
 var dynColorsEmp = JSON.parse(localStorage.getItem('dynColorsEmp') || '{}'); // {dyn: '#hex'}
 var dynColorsEra = JSON.parse(localStorage.getItem('dynColorsEra') || '{}'); // {dyn: '#hex'}
+var editingDyn=''; // 当前被编辑的朝代 = 最近添加
 
 // ===== load
 function loadData(){
@@ -149,7 +148,6 @@ function loadData(){
     var list=Object.keys(dynSet).sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start});
     var sel=$('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
     list.forEach(function(d){ var o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o)});
-    var ed=$('#editDyn'); ed.innerHTML=''; list.forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;ed.appendChild(o)});
 
     $('#status').textContent='加载完成 · 皇帝'+rows.length+' · 年号'+eras.length;
   }).catch(function(e){ $('#status').textContent='加载失败：'+e.message });
@@ -158,6 +156,7 @@ function loadData(){
 // ===== helpers
 function getEmpColor(d){ return dynColorsEmp[d] || dynEmpColorDefault; }
 function getEraColor(d){ return dynColorsEra[d] || dynEraColorDefault; }
+function updateEditingName(){ $('#editingName').textContent = editingDyn? (editingDyn+'（皇帝色/年号色）') : '（尚未添加朝代）'; $('#editEmp').value=getEmpColor(editingDyn||''); $('#editEra').value=getEraColor(editingDyn||''); }
 
 // ===== chips
 function renderChips(){
@@ -165,21 +164,23 @@ function renderChips(){
   pickedDynasties.forEach(function(d){
     var span=document.createElement('span'); span.className='chip';
     var rng=dynRangeMap[d]; var txt=rng?('（'+Math.trunc(rng.start)+' — '+Math.trunc(rng.end)+'）'):'';
+    var border = (d===editingDyn)?'2px solid #111827':'1px solid #e5e7eb';
+    span.style.border = border;
     span.innerHTML="<span class='dot' style='background:"+getEmpColor(d)+"'></span>"+d+txt+"<button class='rm'>×</button>";
-    span.querySelector('.rm').addEventListener('click',function(){pickedDynasties=pickedDynasties.filter(function(x){return x!==d});renderChips();draw()});
+    span.querySelector('.rm').addEventListener('click',function(){pickedDynasties=pickedDynasties.filter(function(x){return x!==d}); if(editingDyn===d){ editingDyn=pickedDynasties[pickedDynasties.length-1]||''; updateEditingName(); } renderChips(); draw()});
     wrap.appendChild(span);
   });
 }
 
 // ===== interaction
-function addDyn(){ var v=$('#dynSelect').value; if(!v) return; if(pickedDynasties.indexOf(v)>=0) return; pickedDynasties.push(v); pickedDynasties.sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start}); renderChips(); draw() }
+function addDyn(){ var v=$('#dynSelect').value; if(!v) return; if(pickedDynasties.indexOf(v)>=0) return; pickedDynasties.push(v); editingDyn=v; updateEditingName(); pickedDynasties.sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start}); renderChips(); draw() }
 function parseInput(val){ var s=String(val||'').trim(); if(!s) return null; var p=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/); if(!p) return parseFloat(s); var y=parseInt(p[1],10); var m=p[2]?parseInt(p[2],10):null; return m==null?y:(y+(y<0?-1:1)*(m/12)); }
-function autoPickByRange(){ if(!$('#autoPick').checked) return; var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity; var m=[]; Object.keys(dynRangeMap).forEach(function(d){var r=dynRangeMap[d]; if(r.end>=s && r.start<=e) m.push(d)}); pickedDynasties=m; renderChips() }
+function autoPickByRange(){ if(!$('#autoPick').checked) return; var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity; var m=[]; Object.keys(dynRangeMap).forEach(function(d){var r=dynRangeMap[d]; if(r.end>=s && r.start<=e) m.push(d)}); pickedDynasties=m; editingDyn = pickedDynasties[pickedDynasties.length-1]||''; updateEditingName(); renderChips() }
 function applyRange(){ customStart=$('#startYear').value?parseInput($('#startYear').value):null; customEnd=$('#endYear').value?parseInput($('#endYear').value):null; if(customStart!=null&&customEnd!=null&&customStart>customEnd){var t=customStart;customStart=customEnd;customEnd=t} autoPickByRange(); draw() }
-function clearRange(){ customStart=customEnd=null; $('#startYear').value=''; $('#endYear').value=''; if($('#autoPick').checked){ pickedDynasties=[]; renderChips() } draw() }
+function clearRange(){ customStart=customEnd=null; $('#startYear').value=''; $('#endYear').value=''; if($('#autoPick').checked){ pickedDynasties=[]; editingDyn=''; updateEditingName(); renderChips() } draw() }
 
 $('#btnAdd').addEventListener('click',addDyn);
-$('#btnClear').addEventListener('click',function(){pickedDynasties=[];renderChips();draw()});
+$('#btnClear').addEventListener('click',function(){pickedDynasties=[]; editingDyn=''; updateEditingName(); renderChips(); draw()});
 $('#btnApplyRange').addEventListener('click',applyRange);
 $('#btnClearRange').addEventListener('click',clearRange);
 $('#autoPick').addEventListener('change',function(){autoPickByRange();draw()});
@@ -187,18 +188,12 @@ $('#showGrid').addEventListener('change',draw);
 $('#showEra').addEventListener('change',draw);
 $('#zoom').addEventListener('input',function(e){ zoom=parseFloat(e.target.value)||1; $('#zoomVal').textContent=(zoom.toFixed(1)+'×'); draw(); });
 
-// palette editor for a single dynasty
-$('#editDyn').addEventListener('change',function(){
-  var d=this.value||''; if(!d) return;
-  $('#editEmp').value=getEmpColor(d);
-  $('#editEra').value=getEraColor(d);
-});
-$('#editEmp').addEventListener('input',function(){ var d=$('#editDyn').value; if(!d) return; dynColorsEmp[d]=this.value; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); renderChips(); draw(); });
-$('#editEra').addEventListener('input',function(){ var d=$('#editDyn').value; if(!d) return; dynColorsEra[d]=this.value; localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); draw(); });
-$('#resetDyn').addEventListener('click',function(){ var d=$('#editDyn').value; if(!d) return; delete dynColorsEmp[d]; delete dynColorsEra[d]; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); $('#editEmp').value=getEmpColor(d); $('#editEra').value=getEraColor(d); renderChips(); draw(); });
+$('#editEmp').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEmp[editingDyn]=this.value; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); renderChips(); draw(); });
+$('#editEra').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEra[editingDyn]=this.value; localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); draw(); });
 
-// ===== draw (labels Svg frozen + bars Svg scroll)
+// ===== draw (left labels frozen + right bars scroll)
 function draw(){
+  var tip=$('#tip'); tip.style.display='none';
   var list=rows.filter(function(r){return pickedDynasties.indexOf(r.朝代)>=0});
   if(!list.length){ $('#result').style.display='none'; return }
   var groups={}; list.forEach(function(r){ if(customStart!=null&&r.在位止<customStart) return; if(customEnd!=null&&r.在位起>customEnd) return; (groups[r.朝代]||(groups[r.朝代]=[])).push(r) });
@@ -211,7 +206,7 @@ function draw(){
   if(customEnd!=null) maxYear=Math.min(maxYear,customEnd);
   var fullRange=maxYear-minYear; if(fullRange<=0) fullRange=1;
 
-  var labelsW=220,rightPad=24,topPad=24,rowH=32,gap=10,groupGap=20;
+  var labelsW=220,topPad=24,rowH=32,gap=10,groupGap=20;
   var wrapRightWidth = Math.max(1200, document.querySelector('.scroll-col').clientWidth-2);
   var contentW = (wrapRightWidth)*zoom; // 右侧可滚动区域宽度
   var rowsCount=0; dyns.forEach(function(d){rowsCount+=groups[d].length});
@@ -219,15 +214,14 @@ function draw(){
   var axisY=H-40;
 
   var labelsSvg=$('#labelsSvg'); labelsSvg.setAttribute('width',labelsW); labelsSvg.setAttribute('height',H); labelsSvg.innerHTML='';
-  var barsSvg=$('#barsSvg'); barsSvg.setAttribute('width',contentW+rightPad); barsSvg.setAttribute('height',H); barsSvg.innerHTML='';
+  var barsSvg=$('#barsSvg'); barsSvg.setAttribute('width',contentW); barsSvg.setAttribute('height',H); barsSvg.innerHTML='';
 
-  // scale for bars (no left pad)
   function scale(y){ return ((y-minYear)/fullRange) * contentW; }
 
-  // grid vertical & axis in barsSvg
+  // grid vertical & axis in barsSvg ——— 固定 1 年间隔
+  var step=1;
+  var startTick=Math.ceil(minYear/step)*step;
   if($('#showGrid').checked){
-    var step=niceStep(fullRange/zoom);
-    var startTick=Math.ceil(minYear/step)*step;
     for(var t=startTick;t<=maxYear;t+=step){
       var x=scale(t);
       var v=document.createElementNS('http://www.w3.org/2000/svg','line');
@@ -263,7 +257,7 @@ function draw(){
       var xs=scale(customStart!=null?clamp(r.在位起,customStart,Infinity):r.在位起);
       var xe=scale(customEnd!=null?clamp(r.在位止,-Infinity,customEnd):r.在位止);
       // ensure minimum width for zero/short durations
-      var minEmpPx=18, ex1=Math.min(xs,xe), ex2=Math.max(xs,xe);
+      var minEmpPx=32, ex1=Math.min(xs,xe), ex2=Math.max(xs,xe);
       var width=Math.max(minEmpPx, ex2-ex1), center=(ex1+ex2)/2; ex1=center-width/2; ex2=center+width/2;
 
       // emperor bar
@@ -285,18 +279,25 @@ function draw(){
           if(prevEnd!=null && s - prevEnd <= 1){ s = prevEnd; }
           snapped.push({name:er.name,s:s,e:e}); prevEnd=e;
         });
-        var minEraPx=14;
+        var minEraPx=28;
         snapped.forEach(function(er){
           var sx=scale(er.s), ex=scale(er.e);
           var cx=(sx+ex)/2, w=Math.max(minEraPx, Math.abs(ex-sx)), half=w/2;
           sx=cx-half; ex=cx+half;
           // clamp inside emperor bar
-          var pad=2, eg1=ex1+pad, eg2=ex2-pad;
+          var pad=3, eg1=ex1+pad, eg2=ex2-pad;
           if(ex-sx>eg2-eg1){ sx=eg1; ex=eg2; } else { if(sx<eg1){ ex+=eg1-sx; sx=eg1;} if(ex>eg2){ sx-=ex-eg2; ex=eg2;} }
           var ey=y+5, eh=rowH-10;
+          var fill=getEraColor(d), stroke=darken(fill,-40);
+
           var eRect=document.createElementNS('http://www.w3.org/2000/svg','rect');
           eRect.setAttribute('x',sx);eRect.setAttribute('y',ey);eRect.setAttribute('width',ex-sx);eRect.setAttribute('height',eh);eRect.setAttribute('rx',6);
-          eRect.setAttribute('fill',getEraColor(d)); barsSvg.appendChild(eRect);
+          eRect.setAttribute('fill',fill); eRect.setAttribute('stroke',stroke); eRect.setAttribute('stroke-width','1');
+          // tooltip for duration
+          eRect.addEventListener('mousemove', function(ev){ var years=yearsSpan(er.s, er.e); document.getElementById('tip').style.display='block'; document.getElementById('tip').style.left=(ev.clientX+12)+'px'; document.getElementById('tip').style.top=(ev.clientY+12)+'px'; document.getElementById('tip').innerHTML = '<strong>'+er.name+'</strong>：持续 '+ years +' 年'; });
+          eRect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
+          barsSvg.appendChild(eRect);
+
           if((ex-sx)>=minEraPx){
             var t=document.createElementNS('http://www.w3.org/2000/svg','text');
             t.setAttribute('x',(sx+ex)/2); t.setAttribute('y',ey+eh*0.68); t.setAttribute('text-anchor','middle'); t.setAttribute('class','label');
@@ -309,12 +310,12 @@ function draw(){
     cursorY+=groups[d].length*(rowH+gap)+groupGap;
   });
 
-  // axis
+  // axis — 1 年刻度 + 标签
   var axis=document.createElementNS('http://www.w3.org/2000/svg','line');
   var axisY2=H-40;
   axis.setAttribute('x1',0);axis.setAttribute('x2',contentW);axis.setAttribute('y1',axisY2);axis.setAttribute('y2',axisY2);axis.setAttribute('class','axis');
   barsSvg.appendChild(axis);
-  var step2=niceStep(fullRange/zoom); var startTick2=Math.ceil(minYear/step2)*step2;
+  var step2=1; var startTick2=Math.ceil(minYear/step2)*step2;
   for(var t=startTick2;t<=maxYear;t+=step2){
     var x=((t-minYear)/fullRange)*contentW;
     var tick=document.createElementNS('http://www.w3.org/2000/svg','line');
