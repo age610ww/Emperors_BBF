@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>中国皇帝时间轴（含年号）</title>
 <style>
-:root { --bg:#ffffff; --text:#111827; --muted:#6b7280; --border:#e5e7eb; --chip-bg:#f3f4f6; --chip-border:#e5e7eb; --axis:#9ca3af; --group:#1f2937; --accent:#2563eb; --grid-v:#e5e7eb; --grid-h:#f3f4f6; --era:#f59e0b; }
+:root { --bg:#ffffff; --text:#111827; --muted:#6b7280; --border:#e5e7eb; --chip-bg:#f3f4f6; --chip-border:#e5e7eb; --axis:#9ca3af; --group:#1f2937; --grid-v:#e5e7eb; --grid-h:#f3f4f6; --era:#f59e0b; }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
 header{padding:24px 16px 0; max-width:1200px; margin:0 auto;}
@@ -20,7 +20,7 @@ select,input[type=number]{padding:10px 12px;border-radius:12px;border:1px solid 
 .chips{display:flex;flex-wrap:wrap;gap:8px;}
 .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border);}
 .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
-.chip .rm{cursor:pointer;border:none;background:transparent;color:var(--accent);font-weight:700;}
+.chip .rm{cursor:pointer;border:none;background:transparent;color:#2563eb;font-weight:700;}
 #timeline-wrap{width:100%;overflow-x:auto;}
 svg{width:100%;height:auto;display:block;background:#fff;}
 .axis text{fill:var(--axis);font-size:12px;}
@@ -28,14 +28,11 @@ svg{width:100%;height:auto;display:block;background:#fff;}
 .label { fill: var(--group); font-size:12px; }
 .bar-outline{ stroke:rgba(0,0,0,.15); stroke-width:.4; fill:none; }
 .group-title{ fill:var(--group); font-size:13px; font-weight:700; }
-.tooltip{ position: fixed; pointer-events:none; z-index: 10; background:#111827; color:#fff; padding:6px 8px; border-radius:8px; font-size:12px; box-shadow:0 6px 18px rgba(0,0,0,.15); transform: translate(-50%, -120%); opacity:0; transition: opacity .12s ease; white-space:nowrap; }
-.tooltip.show{ opacity:1; }
 .grid-v{ stroke: var(--grid-v); stroke-width:1; opacity:.7; }
 .grid-h{ stroke: var(--grid-h); stroke-width:1; opacity:.9; }
 .era{ fill: var(--era); opacity:.95; }
 .legend{display:flex;gap:16px;color:var(--muted);font-size:13px;margin-bottom:6px}
 .swatch{display:inline-block;width:14px;height:8px;border-radius:2px;margin-right:6px;background:var(--era)}
-.err{position:fixed;left:12px;bottom:12px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;padding:8px 10px;border-radius:10px;font-size:12px;display:none;z-index:99}
 </style>
 </head>
 <body>
@@ -79,15 +76,11 @@ svg{width:100%;height:auto;display:block;background:#fff;}
   <div id="timeline-wrap"><svg id="timeline"></svg></div>
 </section>
 
-<div id="tooltip" class="tooltip"></div>
-<div id="err" class="err"></div>
+<div id="tooltip" class="tooltip" style="display:none; position:fixed; background:#111827;color:#fff;padding:6px 8px;border-radius:8px;font-size:12px;"></div>
 
-<!-- 只用一个可靠 CDN，避免脚本加载失败造成“卡在加载中” -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
 <script>
 (function(){
-console.log("[boot] script start");
 var XLSX_URL='emperors.xlsx';
 function $(q,root){return (root||document).querySelector(q)}
 function parseYearPiece(str){var s=String(str||'').trim();if(s==='')return[null,null];var m=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/);if(!m)return[Number(s.replace(/[^-0-9.]/g,'')),null];return[parseInt(m[1],10),m[2]?parseInt(m[2],10):null]}
@@ -101,55 +94,49 @@ function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
 var rows=[], dynSet={}, pickedDynasties=[], customStart=null, customEnd=null;
 var dynRangeMap={}, eras=[];
 
-function showErr(msg){var el=$('#err'); el.textContent=msg; el.style.display='block'}
-
 function loadData(){
-  try{
-    console.log("[boot] loadData… XLSX:", !!window.XLSX);
-    if(!window.XLSX){ showErr('XLSX 脚本未加载'); $('#status').textContent='加载失败：XLSX 脚本未加载'; return; }
-    fetch(XLSX_URL,{cache:'no-store'}).then(function(resp){
-      if(!resp.ok){ throw new Error('无法加载 '+XLSX_URL+' (HTTP '+resp.status+')') }
-      return resp.arrayBuffer()
-    }).then(function(buf){
-      var wb=XLSX.read(buf,{type:'array'});
-      rows=[]; var rowIndex=0;
-      wb.SheetNames.forEach(function(sn){
-        var ws=wb.Sheets[sn]; if(!ws) return;
-        if(sn==='年号' || /^nianhao$/i.test(sn)) return;
-        var json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});
-        json.forEach(function(r){
-          var y1=parseYearPiece(r['在位起']||r['start']||r['起']||''); var sy=y1[0], sm=y1[1];
-          var y2=parseYearPiece(r['在位止']||r['end']||r['止']||''); var ey=y2[0], em=y2[1];
-          var startF=startAsFloat(sy,sm), endF=endAsFloat(ey,em);
-          var rec={朝代:r['朝代']||'',姓名:r['姓名']||'',常用称呼:r['常用称呼']||'',在位起:startF,在位止:endF,sY:sy,sM:sm,eY:ey,eM:em,sheet:sn,idx:rowIndex++};
-          if(rec.朝代 && rec.姓名 && startF!=null && endF!=null){ rows.push(rec) }
-        });
+  if(!window.XLSX){ $('#status').textContent='加载失败：XLSX 未加载'; return; }
+  fetch(XLSX_URL,{cache:'no-store'}).then(function(resp){
+    if(!resp.ok){ throw new Error('无法加载 emperors.xlsx') }
+    return resp.arrayBuffer();
+  }).then(function(buf){
+    var wb=XLSX.read(buf,{type:'array'});
+    rows=[]; var rowIndex=0;
+    wb.SheetNames.forEach(function(sn){
+      var ws=wb.Sheets[sn]; if(!ws) return;
+      if(sn==='年号' || /^nianhao$/i.test(sn)) return;
+      var json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});
+      json.forEach(function(r){
+        var p1=parseYearPiece(r['在位起']||r['start']||r['起']||''); var sy=p1[0], sm=p1[1];
+        var p2=parseYearPiece(r['在位止']||r['end']||r['止']||''); var ey=p2[0], em=p2[1];
+        var startF=startAsFloat(sy,sm), endF=endAsFloat(ey,em);
+        var rec={朝代:r['朝代']||'',姓名:r['姓名']||'',常用称呼:r['常用称呼']||'',在位起:startF,在位止:endF,sY:sy,sM:sm,eY:ey,eM:em,sheet:sn,idx:rowIndex++};
+        if(rec.朝代 && rec.姓名 && startF!=null && endF!=null) rows.push(rec);
       });
-      // 年号表
-      var nSheet = wb.Sheets['年号'] || wb.Sheets['nianhao'];
-      eras = [];
-      if(nSheet){
-        XLSX.utils.sheet_to_json(nSheet,{raw:true,defval:''}).forEach(function(r){
-          var s=Number(r['公元起']), e=Number(r['公元止']);
-          var dyn=String(r['朝代']||'').trim(); var nm=String(r['年号']||'').trim();
-          if(dyn && nm && isFinite(s) && isFinite(e) && e>=s){ eras.push({dynasty:dyn, name:nm, s:s, e:e}) }
-        });
-      }
-      // 计算朝代范围并填充下拉
-      dynRangeMap={}; dynSet={};
-      rows.forEach(function(r){
-        dynSet[r.朝代]=true;
-        if(!dynRangeMap[r.朝代]) dynRangeMap[r.朝代]={start:r.在位起, end:r.在位止};
-        dynRangeMap[r.朝代].start=Math.min(dynRangeMap[r.朝代].start,r.在位起);
-        dynRangeMap[r.朝代].end=Math.max(dynRangeMap[r.朝代].end,r.在位止);
+    });
+    var nSheet=wb.Sheets['年号']||wb.Sheets['nianhao'];
+    eras=[];
+    if(nSheet){
+      XLSX.utils.sheet_to_json(nSheet,{raw:true,defval:''}).forEach(function(r){
+        var s=Number(r['公元起']), e=Number(r['公元止']);
+        var dyn=String(r['朝代']||'').trim(); var nm=String(r['年号']||'').trim();
+        if(dyn && nm && isFinite(s) && isFinite(e) && e>=s) eras.push({dynasty:dyn,name:nm,s:s,e:e});
       });
-      var dynList=Object.keys(dynSet).sort(function(a,b){return (dynRangeMap[a]?dynRangeMap[a].start:Infinity)-(dynRangeMap[b]?dynRangeMap[b].start:Infinity)});
-      var sel=$('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
-      dynList.forEach(function(d){ var o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o) });
-      $('#status').textContent='加载完成'+(eras.length?' · 年号可用':'');
-      console.log("[boot] data loaded:", rows.length, "emperors,", eras.length, "eras");
-    }).catch(function(e){ console.error(e); showErr(e.message); $('#status').textContent='加载失败：'+e.message; });
-  }catch(e){ console.error(e); showErr(e.message); $('#status').textContent='加载失败：'+e.message; }
+    }
+    dynRangeMap={}; dynSet={};
+    rows.forEach(function(r){
+      dynSet[r.朝代]=true;
+      if(!dynRangeMap[r.朝代]) dynRangeMap[r.朝代]={start:r.在位起,end:r.在位止};
+      dynRangeMap[r.朝代].start=Math.min(dynRangeMap[r.朝代].start,r.在位起);
+      dynRangeMap[r.朝代].end=Math.max(dynRangeMap[r.朝代].end,r.在位止);
+    });
+    var dynList=Object.keys(dynSet).sort(function(a,b){return (dynRangeMap[a]?dynRangeMap[a].start:Infinity)-(dynRangeMap[b]?dynRangeMap[b].start:Infinity)});
+    var sel=$('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
+    dynList.forEach(function(d){ var o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o) });
+    $('#status').textContent='加载完成'+(eras.length?' · 年号可用':'');
+  }).catch(function(e){
+    $('#status').textContent='加载失败：'+e.message;
+  });
 }
 
 function renderChips(){
@@ -158,44 +145,24 @@ function renderChips(){
     var chip=document.createElement('span'); chip.className='chip';
     var range=dynRangeMap[d];
     var txt=range?('（'+(range.start<0?('前'+Math.abs(Math.trunc(range.start))):Math.trunc(range.start))+' — '+(range.end<0?('前'+Math.abs(Math.trunc(range.end))):Math.trunc(range.end))+'）'):'';
-    chip.innerHTML=\"<span class='dot' style='background:\"+hashColor(d)+\"'></span>\"+d+txt+\"<button class='rm' title='移除'>×</button>\";
+    chip.innerHTML="<span class='dot' style='background:"+hashColor(d)+"'></span>"+d+txt+"<button class='rm' title='移除'>×</button>";
     chip.querySelector('.rm').addEventListener('click',function(){ removeDyn(d) });
     wrap.appendChild(chip);
   });
 }
 
-function addDyn(){
-  var sel=$('#dynSelect'); var v=sel.value;
-  if(!v) return;
-  if(pickedDynasties.indexOf(v)>=0) return;
-  pickedDynasties.push(v);
-  pickedDynasties.sort(function(a,b){ return dynRangeMap[a].start - dynRangeMap[b].start });
-  renderChips(); draw();
-}
-function removeDyn(v){
-  pickedDynasties=pickedDynasties.filter(function(x){return x!==v});
-  renderChips(); draw();
-}
+function addDyn(){ var v=$('#dynSelect').value; if(!v || pickedDynasties.indexOf(v)>=0) return;
+  pickedDynasties.push(v); pickedDynasties.sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start}); renderChips(); draw(); }
+function removeDyn(v){ pickedDynasties=pickedDynasties.filter(function(x){return x!==v}); renderChips(); draw(); }
 
 function parseInput(val){ var p=parseYearPiece(val); if(p[0]==null) return null; return p[1]==null?p[0]:endAsFloat(p[0],p[1]) }
-function autoPickByRange(){
-  if(!$('#autoPick').checked) return;
-  var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity;
-  var matches=[]; Object.keys(dynRangeMap).forEach(function(dyn){ var rng=dynRangeMap[dyn]; if(rng.end>=s && rng.start<=e) matches.push(dyn) });
-  matches.sort(function(a,b){ return dynRangeMap[a].start - dynRangeMap[b].start });
-  pickedDynasties=matches; renderChips();
-}
-function applyRange(){
-  customStart=$('#startYear').value?parseInput($('#startYear').value):null;
-  customEnd=$('#endYear').value?parseInput($('#endYear').value):null;
-  if(customStart!=null && customEnd!=null && customStart>customEnd){ var t=customStart; customStart=customEnd; customEnd=t }
-  autoPickByRange(); draw(); var res=$('#result'); if(res && res.style.display!=='none') res.scrollIntoView({behavior:'smooth',block:'start'})
-}
+function autoPickByRange(){ if(!$('#autoPick').checked) return; var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity; var matches=[]; Object.keys(dynRangeMap).forEach(function(dyn){ var rng=dynRangeMap[dyn]; if(rng.end>=s && rng.start<=e) matches.push(dyn) }); matches.sort(function(a,b){ return dynRangeMap[a].start - dynRangeMap[b].start }); pickedDynasties=matches; renderChips() }
+function applyRange(){ customStart=$('#startYear').value?parseInput($('#startYear').value):null; customEnd=$('#endYear').value?parseInput($('#endYear').value):null; if(customStart!=null && customEnd!=null && customStart>customEnd){ var t=customStart; customStart=customEnd; customEnd=t } autoPickByRange(); draw(); var res=$('#result'); if(res&&res.style.display!=='none') res.scrollIntoView({behavior:'smooth',block:'start'}) }
 function clearRange(){ customStart=customEnd=null; $('#startYear').value=''; $('#endYear').value=''; if($('#autoPick').checked){ pickedDynasties=[]; renderChips() } draw() }
 
 var tip=$('#tooltip');
-function showTip(html,x,y){ tip.innerHTML=html; tip.style.left=x+'px'; tip.style.top=y+'px'; tip.classList.add('show') }
-function hideTip(){ tip.classList.remove('show') }
+function showTip(html,x,y){ tip.innerHTML=html; tip.style.left=x+'px'; tip.style.top=y+'px'; tip.style.display='block' }
+function hideTip(){ tip.style.display='none' }
 
 function draw(){
   var list=rows.filter(function(r){ return pickedDynasties.indexOf(r.朝代)>=0 });
@@ -325,21 +292,20 @@ document.getElementById('showGrid').addEventListener('change',function(){draw()}
 document.getElementById('showEra').addEventListener('change',function(){draw()});
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function(){ console.log('[boot] DOM ready'); loadData(); });
+  document.addEventListener('DOMContentLoaded', loadData);
 } else {
   loadData();
 }
 
-// watchdog：3秒后还在“正在加载数据…”就提示可能的原因
+// 若 5 秒仍为“正在加载数据…”，在状态栏标明失败原因（无弹窗、无提示条）
 setTimeout(function(){
   var st=$('#status').textContent||'';
   if(/正在加载数据/.test(st)){
-    showErr('长时间加载中：1) 确认 emperors.xlsx 与 index.html 在同一目录；2) 若仓库启用子路径，请确保以相对路径加载；3) 检查浏览器控制台是否有脚本/网络错误。');
+    $('#status').textContent='加载失败：未能读取 XLSX 或 emperors.xlsx 不在同一目录';
   }
-}, 3000);
+}, 5000);
 
-document.getElementById('timeline-wrap').addEventListener('mouseleave',function(){document.getElementById('tooltip').classList.remove('show')});
-console.log("[boot] script end");
+document.getElementById('timeline-wrap').addEventListener('mouseleave',function(){document.getElementById('tooltip').style.display='none'});
 })();
 </script>
 </body>
