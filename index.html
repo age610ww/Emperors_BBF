@@ -2,40 +2,41 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>中国皇帝时间轴（含年号）</title>
-  <style>
-    :root { --bg:#ffffff; --text:#111827; --muted:#6b7280; --border:#e5e7eb; --chip-bg:#f3f4f6; --chip-border:#e5e7eb; --axis:#9ca3af; --group:#1f2937; --accent:#2563eb; --grid-v:#e5e7eb; --grid-h:#f3f4f6; --era:#f59e0b; }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
-    header{padding:24px 16px 0; max-width:1200px; margin:0 auto;}
-    h1{margin:0 0 8px; font-size:28px;}
-    .card{max-width:1200px;margin:16px auto;background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;}
-    .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
-    select,input[type=number]{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--text);}
-    .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#111827;color:#fff;font-weight:600;cursor:pointer;}
-    .btn.secondary{background:transparent;color:var(--text);}
-    .status{margin-top:6px;color:var(--muted);font-size:13px;}
-    .chips{display:flex;flex-wrap:wrap;gap:8px;}
-    .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border);}
-    .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
-    .chip .rm{cursor:pointer;border:none;background:transparent;color:var(--accent);font-weight:700;}
-    #timeline-wrap{width:100%;overflow-x:auto;}
-    svg{width:100%;height:auto;display:block;background:#fff;}
-    .axis text{fill:var(--axis);font-size:12px;}
-    .axis line{stroke:var(--axis);}
-    .label { fill: var(--group); font-size:12px; }
-    .bar-outline{ stroke:rgba(0,0,0,.15); stroke-width:.4; fill:none; }
-    .group-title{ fill:var(--group); font-size:13px; font-weight:700; }
-    .tooltip{ position: fixed; pointer-events:none; z-index: 10; background:#111827; color:#fff; padding:6px 8px; border-radius:8px; font-size:12px; box-shadow:0 6px 18px rgba(0,0,0,.15); transform: translate(-50%, -120%); opacity:0; transition: opacity .12s ease; white-space:nowrap; }
-    .tooltip.show{ opacity:1; }
-    .grid-v{ stroke: var(--grid-v); stroke-width:1; opacity:.7; }
-    .grid-h{ stroke: var(--grid-h); stroke-width:1; opacity:.9; }
-    .era{ fill: var(--era); opacity:.95; }
-    .legend{display:flex;gap:16px;color:var(--muted);font-size:13px;margin-bottom:6px}
-    .swatch{display:inline-block;width:14px;height:8px;border-radius:2px;margin-right:6px;background:var(--era)}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>中国皇帝时间轴（含年号）</title>
+<style>
+:root { --bg:#ffffff; --text:#111827; --muted:#6b7280; --border:#e5e7eb; --chip-bg:#f3f4f6; --chip-border:#e5e7eb; --axis:#9ca3af; --group:#1f2937; --accent:#2563eb; --grid-v:#e5e7eb; --grid-h:#f3f4f6; --era:#f59e0b; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
+header{padding:24px 16px 0; max-width:1200px; margin:0 auto;}
+h1{margin:0 0 8px; font-size:28px;}
+.card{max-width:1200px;margin:16px auto;background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+select,input[type=number]{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--text);}
+.btn{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#111827;color:#fff;font-weight:600;cursor:pointer;}
+.btn.secondary{background:transparent;color:var(--text);}
+.status{margin-top:6px;color:var(--muted);font-size:13px;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--chip-border);}
+.chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
+.chip .rm{cursor:pointer;border:none;background:transparent;color:var(--accent);font-weight:700;}
+#timeline-wrap{width:100%;overflow-x:auto;}
+svg{width:100%;height:auto;display:block;background:#fff;}
+.axis text{fill:var(--axis);font-size:12px;}
+.axis line{stroke:var(--axis);}
+.label { fill: var(--group); font-size:12px; }
+.bar-outline{ stroke:rgba(0,0,0,.15); stroke-width:.4; fill:none; }
+.group-title{ fill:var(--group); font-size:13px; font-weight:700; }
+.tooltip{ position: fixed; pointer-events:none; z-index: 10; background:#111827; color:#fff; padding:6px 8px; border-radius:8px; font-size:12px; box-shadow:0 6px 18px rgba(0,0,0,.15); transform: translate(-50%, -120%); opacity:0; transition: opacity .12s ease; white-space:nowrap; }
+.tooltip.show{ opacity:1; }
+.grid-v{ stroke: var(--grid-v); stroke-width:1; opacity:.7; }
+.grid-h{ stroke: var(--grid-h); stroke-width:1; opacity:.9; }
+.era{ fill: var(--era); opacity:.95; }
+.legend{display:flex;gap:16px;color:var(--muted);font-size:13px;margin-bottom:6px}
+.swatch{display:inline-block;width:14px;height:8px;border-radius:2px;margin-right:6px;background:var(--era)}
+.err{position:fixed;left:12px;bottom:12px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;padding:8px 10px;border-radius:10px;font-size:12px;display:none;z-index:99}
+</style>
 </head>
 <body>
 <header><h1>中国皇帝时间轴</h1></header>
@@ -79,181 +80,217 @@
 </section>
 
 <div id="tooltip" class="tooltip"></div>
+<div id="err" class="err"></div>
 
 <!-- 只用一个可靠 CDN，避免脚本加载失败造成“卡在加载中” -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
-const XLSX_URL='emperors.xlsx';
-const S=(q,e=document)=>e.querySelector(q);
-function parseYearPiece(str){const s=String(str).trim();if(s==='')return[null,null];const m=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/);if(!m)return[Number(s.replace(/[^-0-9.]/g,'')),null];return[parseInt(m[1],10),m[2]?parseInt(m[2],10):null]}
-function startAsFloat(y,m){if(y==null)return null;if(m==null)return y;const sign=y<0?-1:1;return y+sign*((m-1)/12)}
-function endAsFloat(y,m){if(y==null)return null;if(m==null)return y;const sign=y<0?-1:1;return y+sign*(m/12)}
-function ymLabel(y,m){if(y==null)return'';const t=m?`${Math.abs(y)}年${m}月`:`${Math.abs(y)}年`;return y<0?`公元前${t}`:`公元${t}`}
-function hashColor(str){let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;const hue=h%360;const sat=60+(h%20);return`hsl(${hue} ${sat}% 48%)`}
-function niceStep(range){const raw=range/8;const p=Math.pow(10,Math.floor(Math.log10(raw)));const cs=[1,2,5,10].map(k=>k*p);let b=cs[0];for(const c of cs)if(Math.abs(raw-c)<Math.abs(raw-b))b=c;return Math.max(1,Math.round(b))}
+(function(){
+console.log("[boot] script start");
+var XLSX_URL='emperors.xlsx';
+function $(q,root){return (root||document).querySelector(q)}
+function parseYearPiece(str){var s=String(str||'').trim();if(s==='')return[null,null];var m=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/);if(!m)return[Number(s.replace(/[^-0-9.]/g,'')),null];return[parseInt(m[1],10),m[2]?parseInt(m[2],10):null]}
+function startAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*((m-1)/12)}
+function endAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*(m/12)}
+function ymLabel(y,m){if(y==null)return'';var t=m?Math.abs(y)+'年'+m+'月':Math.abs(y)+'年';return y<0?'公元前'+t:'公元'+t}
+function hashColor(str){var h=0;for(var i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;var hue=h%360;var sat=60+(h%20);return'hsl('+hue+' '+sat+'% 48%)'}
+function niceStep(range){var raw=range/8;var p=Math.pow(10,Math.floor(Math.log10(raw)));var cs=[1,2,5,10].map(function(k){return k*p});var b=cs[0];for(var i=0;i<cs.length;i++)if(Math.abs(raw-cs[i])<Math.abs(raw-b))b=cs[i];return Math.max(1,Math.round(b))}
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
 
-let rows=[], dynSet=new Set(), pickedDynasties=[], customStart=null, customEnd=null;
-const dynRangeMap=new Map(); let eras=[];
+var rows=[], dynSet={}, pickedDynasties=[], customStart=null, customEnd=null;
+var dynRangeMap={}, eras=[];
 
-async function loadData(){
+function showErr(msg){var el=$('#err'); el.textContent=msg; el.style.display='block'}
+
+function loadData(){
   try{
-    if(!window.XLSX) throw new Error('XLSX 脚本未加载');
-    const resp=await fetch(XLSX_URL,{cache:'no-store'});
-    if(!resp.ok)throw new Error('无法加载 '+XLSX_URL+' (HTTP '+resp.status+')');
-    const buf=await resp.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array'});
-    // 读取皇帝表
-    rows=[];let rowIndex=0;
-    wb.SheetNames.forEach(sn=>{
-      const ws=wb.Sheets[sn]; if(!ws) return;
-      if(sn==='年号' || /^nianhao$/i.test(sn)) return; // 年号表另读
-      const json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});
-      json.forEach(r=>{
-        const [sy,sm]=parseYearPiece(r['在位起']||r['start']||r['起']||'');
-        const [ey,em]=parseYearPiece(r['在位止']||r['end']||r['止']||'');
-        const startF=startAsFloat(sy,sm), endF=endAsFloat(ey,em);
-        const rec={朝代:r['朝代']||'',姓名:r['姓名']||'',常用称呼:r['常用称呼']||'',在位起:startF,在位止:endF,sY:sy,sM:sm,eY:ey,eM:em,sheet:sn,idx:rowIndex++};
-        if(rec.朝代 && rec.姓名 && startF!=null && endF!=null) rows.push(rec);
+    console.log("[boot] loadData… XLSX:", !!window.XLSX);
+    if(!window.XLSX){ showErr('XLSX 脚本未加载'); $('#status').textContent='加载失败：XLSX 脚本未加载'; return; }
+    fetch(XLSX_URL,{cache:'no-store'}).then(function(resp){
+      if(!resp.ok){ throw new Error('无法加载 '+XLSX_URL+' (HTTP '+resp.status+')') }
+      return resp.arrayBuffer()
+    }).then(function(buf){
+      var wb=XLSX.read(buf,{type:'array'});
+      rows=[]; var rowIndex=0;
+      wb.SheetNames.forEach(function(sn){
+        var ws=wb.Sheets[sn]; if(!ws) return;
+        if(sn==='年号' || /^nianhao$/i.test(sn)) return;
+        var json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});
+        json.forEach(function(r){
+          var y1=parseYearPiece(r['在位起']||r['start']||r['起']||''); var sy=y1[0], sm=y1[1];
+          var y2=parseYearPiece(r['在位止']||r['end']||r['止']||''); var ey=y2[0], em=y2[1];
+          var startF=startAsFloat(sy,sm), endF=endAsFloat(ey,em);
+          var rec={朝代:r['朝代']||'',姓名:r['姓名']||'',常用称呼:r['常用称呼']||'',在位起:startF,在位止:endF,sY:sy,sM:sm,eY:ey,eM:em,sheet:sn,idx:rowIndex++};
+          if(rec.朝代 && rec.姓名 && startF!=null && endF!=null){ rows.push(rec) }
+        });
       });
-    });
-    // 读取年号表
-    const nSheet = wb.Sheets['年号'] || wb.Sheets['nianhao'];
-    eras = nSheet ? XLSX.utils.sheet_to_json(nSheet,{raw:true,defval:''}).map(r=>{
-      const s=Number(r['公元起']), e=Number(r['公元止']);
-      return { dynasty:String(r['朝代']||'').trim(), name:String(r['年号']||'').trim(), s:s, e:e }
-    }).filter(d=>d.dynasty && d.name && Number.isFinite(d.s) && Number.isFinite(d.e) && d.e>=d.s) : [];
-
-    const byDyn=new Map();
-    rows.forEach(r=>{
-      if(!byDyn.has(r.朝代)) byDyn.set(r.朝代,{min:r.在位起,max:r.在位止});
-      const o=byDyn.get(r.朝代); o.min=Math.min(o.min,r.在位起); o.max=Math.max(o.max,r.在位止);
-    });
-    byDyn.forEach((v,k)=>dynRangeMap.set(k,{start:v.min,end:v.max}));
-    rows.forEach(r=>dynSet.add(r.朝代));
-    const sel=S('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
-    [...dynSet].sort((a,b)=>{const ra=dynRangeMap.get(a),rb=dynRangeMap.get(b);return (ra?ra.start:Infinity)-(rb?rb.start:Infinity)})
-      .forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o)});
-    S('#status').textContent='加载完成' + (eras.length? ' · 年号可用' : '');
-  }catch(e){ console.error(e); S('#status').textContent='加载失败：'+e.message }
+      // 年号表
+      var nSheet = wb.Sheets['年号'] || wb.Sheets['nianhao'];
+      eras = [];
+      if(nSheet){
+        XLSX.utils.sheet_to_json(nSheet,{raw:true,defval:''}).forEach(function(r){
+          var s=Number(r['公元起']), e=Number(r['公元止']);
+          var dyn=String(r['朝代']||'').trim(); var nm=String(r['年号']||'').trim();
+          if(dyn && nm && isFinite(s) && isFinite(e) && e>=s){ eras.push({dynasty:dyn, name:nm, s:s, e:e}) }
+        });
+      }
+      // 计算朝代范围并填充下拉
+      dynRangeMap={}; dynSet={};
+      rows.forEach(function(r){
+        dynSet[r.朝代]=true;
+        if(!dynRangeMap[r.朝代]) dynRangeMap[r.朝代]={start:r.在位起, end:r.在位止};
+        dynRangeMap[r.朝代].start=Math.min(dynRangeMap[r.朝代].start,r.在位起);
+        dynRangeMap[r.朝代].end=Math.max(dynRangeMap[r.朝代].end,r.在位止);
+      });
+      var dynList=Object.keys(dynSet).sort(function(a,b){return (dynRangeMap[a]?dynRangeMap[a].start:Infinity)-(dynRangeMap[b]?dynRangeMap[b].start:Infinity)});
+      var sel=$('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
+      dynList.forEach(function(d){ var o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o) });
+      $('#status').textContent='加载完成'+(eras.length?' · 年号可用':'');
+      console.log("[boot] data loaded:", rows.length, "emperors,", eras.length, "eras");
+    }).catch(function(e){ console.error(e); showErr(e.message); $('#status').textContent='加载失败：'+e.message; });
+  }catch(e){ console.error(e); showErr(e.message); $('#status').textContent='加载失败：'+e.message; }
 }
 
-function addDyn(){ const v=S('#dynSelect').value; if(!v || pickedDynasties.includes(v)) return;
-  pickedDynasties.push(v); pickedDynasties.sort((a,b)=>{const ra=dynRangeMap.get(a),rb=dynRangeMap.get(b);return (ra?ra.start:Infinity)-(rb?rb.start:Infinity)}); renderChips(); draw(); }
-function removeDyn(v){ pickedDynasties=pickedDynasties.filter(x=>x!==v); renderChips(); draw(); }
 function renderChips(){
-  const wrap=S('#chips'); wrap.innerHTML='';
-  pickedDynasties.forEach(d=>{
-    const chip=document.createElement('span'); chip.className='chip';
-    const range=dynRangeMap.get(d);
-    const txt=range?`（${range.start<0?`前${Math.abs(Math.trunc(range.start))}`:Math.trunc(range.start)} — ${range.end<0?`前${Math.abs(Math.trunc(range.end))}`:Math.trunc(range.end)}）`:'';
-    chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}${txt}<button class='rm' title='移除'>×</button>`;
-    chip.querySelector('.rm').addEventListener('click',()=>removeDyn(d));
+  var wrap=$('#chips'); wrap.innerHTML='';
+  pickedDynasties.forEach(function(d){
+    var chip=document.createElement('span'); chip.className='chip';
+    var range=dynRangeMap[d];
+    var txt=range?('（'+(range.start<0?('前'+Math.abs(Math.trunc(range.start))):Math.trunc(range.start))+' — '+(range.end<0?('前'+Math.abs(Math.trunc(range.end))):Math.trunc(range.end))+'）'):'';
+    chip.innerHTML=\"<span class='dot' style='background:\"+hashColor(d)+\"'></span>\"+d+txt+\"<button class='rm' title='移除'>×</button>\";
+    chip.querySelector('.rm').addEventListener('click',function(){ removeDyn(d) });
     wrap.appendChild(chip);
   });
 }
-function parseInput(val){ const [y,m]=parseYearPiece(val); if(y==null) return null; return m==null?y:endAsFloat(y,m) }
-function autoPickByRange(){ if(!S('#autoPick').checked) return; const s=customStart!=null?customStart:-Infinity; const e=customEnd!=null?customEnd:Infinity; const matches=[]; dynRangeMap.forEach((rng,dyn)=>{ if(rng.end>=s && rng.start<=e) matches.push(dyn) }); matches.sort((a,b)=>{ const ra=dynRangeMap.get(a),rb=dynRangeMap.get(b); return (ra?ra.start:Infinity)-(rb?rb.start:Infinity) }); pickedDynasties=matches; renderChips() }
-function applyRange(){ customStart=S('#startYear').value?parseInput(S('#startYear').value):null; customEnd=S('#endYear').value?parseInput(S('#endYear').value):null; if(customStart!=null && customEnd!=null && customStart>customEnd) [customStart,customEnd]=[customEnd,customStart]; autoPickByRange(); draw(); const res=S('#result'); if(res&&res.style.display!=='none') res.scrollIntoView({behavior:'smooth',block:'start'}) }
-function clearRange(){ customStart=customEnd=null; S('#startYear').value=''; S('#endYear').value=''; if(S('#autoPick').checked){ pickedDynasties=[]; renderChips() } draw() }
 
-const tip=S('#tooltip'); function showTip(html,x,y){ tip.innerHTML=html; tip.style.left=x+'px'; tip.style.top=y+'px'; tip.classList.add('show') } function hideTip(){ tip.classList.remove('show') }
+function addDyn(){
+  var sel=$('#dynSelect'); var v=sel.value;
+  if(!v) return;
+  if(pickedDynasties.indexOf(v)>=0) return;
+  pickedDynasties.push(v);
+  pickedDynasties.sort(function(a,b){ return dynRangeMap[a].start - dynRangeMap[b].start });
+  renderChips(); draw();
+}
+function removeDyn(v){
+  pickedDynasties=pickedDynasties.filter(function(x){return x!==v});
+  renderChips(); draw();
+}
+
+function parseInput(val){ var p=parseYearPiece(val); if(p[0]==null) return null; return p[1]==null?p[0]:endAsFloat(p[0],p[1]) }
+function autoPickByRange(){
+  if(!$('#autoPick').checked) return;
+  var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity;
+  var matches=[]; Object.keys(dynRangeMap).forEach(function(dyn){ var rng=dynRangeMap[dyn]; if(rng.end>=s && rng.start<=e) matches.push(dyn) });
+  matches.sort(function(a,b){ return dynRangeMap[a].start - dynRangeMap[b].start });
+  pickedDynasties=matches; renderChips();
+}
+function applyRange(){
+  customStart=$('#startYear').value?parseInput($('#startYear').value):null;
+  customEnd=$('#endYear').value?parseInput($('#endYear').value):null;
+  if(customStart!=null && customEnd!=null && customStart>customEnd){ var t=customStart; customStart=customEnd; customEnd=t }
+  autoPickByRange(); draw(); var res=$('#result'); if(res && res.style.display!=='none') res.scrollIntoView({behavior:'smooth',block:'start'})
+}
+function clearRange(){ customStart=customEnd=null; $('#startYear').value=''; $('#endYear').value=''; if($('#autoPick').checked){ pickedDynasties=[]; renderChips() } draw() }
+
+var tip=$('#tooltip');
+function showTip(html,x,y){ tip.innerHTML=html; tip.style.left=x+'px'; tip.style.top=y+'px'; tip.classList.add('show') }
+function hideTip(){ tip.classList.remove('show') }
 
 function draw(){
-  const list=rows.filter(r=>pickedDynasties.includes(r.朝代));
-  if(!list.length){ S('#result').style.display='none'; return }
-  const groups={};
-  list.forEach(r=>{
+  var list=rows.filter(function(r){ return pickedDynasties.indexOf(r.朝代)>=0 });
+  if(!list.length){ $('#result').style.display='none'; return }
+  var groups={}; list.forEach(function(r){
     if(customStart!=null && r.在位止<customStart) return;
     if(customEnd!=null && r.在位起>customEnd) return;
-    (groups[r.朝代]??=[]).push(r)
+    if(!groups[r.朝代]) groups[r.朝代]=[]; groups[r.朝代].push(r);
   });
-  const dyns=pickedDynasties.filter(d=>groups[d]);
-  if(!dyns.length){ S('#result').style.display='none'; return }
-  dyns.forEach(d=>groups[d].sort((a,b)=>(a.在位起-b.在位起)||(a.在位止-b.在位止)||(a.idx-b.idx)));
-  const all=dyns.flatMap(d=>groups[d]);
-  let minYear=Math.min(...all.map(r=>r.在位起)), maxYear=Math.max(...all.map(r=>r.在位止));
+  var dyns=pickedDynasties.filter(function(d){ return !!groups[d] });
+  if(!dyns.length){ $('#result').style.display='none'; return }
+  dyns.forEach(function(d){ groups[d].sort(function(a,b){ return (a.在位起-b.在位起)||(a.在位止-b.在位止)||(a.idx-b.idx) }) });
+  var all=[]; dyns.forEach(function(d){ all=all.concat(groups[d]) });
+  var minYear=Math.min.apply(null, all.map(function(r){return r.在位起}));
+  var maxYear=Math.max.apply(null, all.map(function(r){return r.在位止}));
   if(customStart!=null) minYear=Math.max(minYear,customStart);
   if(customEnd!=null) maxYear=Math.min(maxYear,customEnd);
-  const range=Math.max(1,maxYear-minYear);
+  var range=Math.max(1,maxYear-minYear);
 
-  const wrap=S('#timeline-wrap');
-  const W=Math.max(1100,wrap.clientWidth-2);
-  const leftPad=200,rightPad=24,topPad=24,rowH=28,gap=8,groupGap=18;
-  let rowsCount=0; dyns.forEach(d=>rowsCount+=groups[d].length);
-  const H=topPad+dyns.length*24+rowsCount*(rowH+gap)+(dyns.length-1)*groupGap+80;
-  const axisY=H-40;
-  const scale=y=>leftPad+((y-minYear)/range)*(W-leftPad-rightPad);
-  const svg=S('#timeline'); svg.setAttribute('width',W); svg.setAttribute('height',H); svg.innerHTML='';
+  var wrap=$('#timeline-wrap');
+  var W=Math.max(1100,wrap.clientWidth-2);
+  var leftPad=200,rightPad=24,topPad=24,rowH=28,gap=8,groupGap=18;
+  var rowsCount=0; dyns.forEach(function(d){ rowsCount+=groups[d].length });
+  var H=topPad+dyns.length*24+rowsCount*(rowH+gap)+(dyns.length-1)*groupGap+80;
+  var axisY=H-40;
+  var scale=function(y){ return leftPad+((y-minYear)/range)*(W-leftPad-rightPad) };
+  var svg=$('#timeline'); svg.setAttribute('width',W); svg.setAttribute('height',H); svg.innerHTML='';
 
-  const gridLayer=document.createElementNS('http://www.w3.org/2000/svg','g'); gridLayer.setAttribute('id','gridLayer'); svg.appendChild(gridLayer);
-  const barsLayer=document.createElementNS('http://www.w3.org/2000/svg','g'); barsLayer.setAttribute('id','barsLayer'); svg.appendChild(barsLayer);
+  var gridLayer=document.createElementNS('http://www.w3.org/2000/svg','g'); gridLayer.setAttribute('id','gridLayer'); svg.appendChild(gridLayer);
+  var barsLayer=document.createElementNS('http://www.w3.org/2000/svg','g'); barsLayer.setAttribute('id','barsLayer'); svg.appendChild(barsLayer);
 
-  const step=niceStep(range);
-  const startTick=Math.ceil(minYear/step)*step;
-  if(S('#showGrid').checked){
-    for(let t=startTick;t<=maxYear;t+=step){
-      const x=scale(t);
-      const vline=document.createElementNS('http://www.w3.org/2000/svg','line');
+  var step=niceStep(range);
+  var startTick=Math.ceil(minYear/step)*step;
+  if($('#showGrid').checked){
+    for(var t=startTick;t<=maxYear;t+=step){
+      var x=scale(t);
+      var vline=document.createElementNS('http://www.w3.org/2000/svg','line');
       vline.setAttribute('x1',x); vline.setAttribute('x2',x); vline.setAttribute('y1',topPad); vline.setAttribute('y2',axisY); vline.setAttribute('class','grid-v'); gridLayer.appendChild(vline);
     }
   }
 
-  let cursorY=topPad;
-  dyns.forEach(d=>{
-    const headerH=22;
-    const title=document.createElementNS('http://www.w3.org/2000/svg','text');
+  var cursorY=topPad;
+  dyns.forEach(function(d){
+    var headerH=22;
+    var title=document.createElementNS('http://www.w3.org/2000/svg','text');
     title.setAttribute('x',12); title.setAttribute('y',cursorY+10); title.setAttribute('class','group-title');
-    const rr=dynRangeMap.get(d);
-    const rangeTxt=rr?`（${rr.start<0?`前${Math.abs(Math.trunc(rr.start))}`:Math.trunc(rr.start)} — ${rr.end<0?`前${Math.abs(Math.trunc(rr.end))}`:Math.trunc(rr.end)}）`:'';
-    title.textContent=d+(rangeTxt?` ${rangeTxt}`:'');
+    var rr=dynRangeMap[d];
+    var rangeTxt=rr?('（'+(rr.start<0?('前'+Math.abs(Math.trunc(rr.start))):Math.trunc(rr.start))+' — '+(rr.end<0?('前'+Math.abs(Math.trunc(rr.end))):Math.trunc(rr.end))+'）'):'';
+    title.textContent=d+(rangeTxt?(' '+rangeTxt):'');
     barsLayer.appendChild(title);
     cursorY+=headerH;
 
-    groups[d].forEach((r,i)=>{
-      const y=cursorY+i*(rowH+gap);
-      if(S('#showGrid').checked){
-        const hline=document.createElementNS('http://www.w3.org/2000/svg','line');
+    groups[d].forEach(function(r,i){
+      var y=cursorY+i*(rowH+gap);
+      if($('#showGrid').checked){
+        var hline=document.createElementNS('http://www.w3.org/2000/svg','line');
         hline.setAttribute('x1',leftPad); hline.setAttribute('x2',W-rightPad); hline.setAttribute('y1',y+rowH); hline.setAttribute('y2',y+rowH); hline.setAttribute('class','grid-h'); gridLayer.appendChild(hline);
       }
-      const s=customStart!=null?clamp(r.在位起,customStart,Infinity):r.在位起;
-      const e=customEnd!=null?clamp(r.在位止,-Infinity,customEnd):r.在位止;
-      const x1=scale(s), x2=scale(e);
-      const alias=r.常用称呼||r.姓名;
+      var s=customStart!=null?clamp(r.在位起,customStart,Infinity):r.在位起;
+      var e=customEnd!=null?clamp(r.在位止,-Infinity,customEnd):r.在位止;
+      var x1=scale(s), x2=scale(e);
+      var alias=r.常用称呼||r.姓名;
 
-      const name=document.createElementNS('http://www.w3.org/2000/svg','text');
+      var name=document.createElementNS('http://www.w3.org/2000/svg','text');
       name.setAttribute('x',leftPad-10); name.setAttribute('y',y+rowH*0.7);
       name.setAttribute('text-anchor','end'); name.setAttribute('class','label');
-      name.textContent=alias===r.姓名?alias:`${alias} ${r.姓名}`; barsLayer.appendChild(name);
+      name.textContent=(alias===r.姓名?alias:(alias+' '+r.姓名));
+      barsLayer.appendChild(name);
 
-      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      var rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
       rect.setAttribute('x',Math.min(x1,x2)); rect.setAttribute('y',y); rect.setAttribute('width',Math.max(4,Math.abs(x2-x1))); rect.setAttribute('height',rowH); rect.setAttribute('rx',6);
       rect.setAttribute('fill',hashColor(d));
-      rect.addEventListener('mousemove',ev=>{ showTip(`${alias===r.姓名?alias:`${alias} ${r.姓名}`}<br>${ymLabel(r.sY,r.sM)} — ${ymLabel(r.eY,r.eM)}`,ev.clientX,ev.clientY) });
+      rect.addEventListener('mousemove',function(ev){ showTip((alias===r.姓名?alias:(alias+' '+r.姓名))+'<br>'+ymLabel(r.sY,r.sM)+' — '+ymLabel(r.eY,r.eM),ev.clientX,ev.clientY) });
       rect.addEventListener('mouseleave',hideTip);
       barsLayer.appendChild(rect);
 
-      const outline=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      var outline=document.createElementNS('http://www.w3.org/2000/svg','rect');
       outline.setAttribute('x',Math.min(x1,x2)); outline.setAttribute('y',y); outline.setAttribute('width',Math.max(4,Math.abs(x2-x1))); outline.setAttribute('height',rowH); outline.setAttribute('rx',6); outline.setAttribute('class','bar-outline');
       barsLayer.appendChild(outline);
 
-      // 年号切片（可选显示）
-      if(S('#showEra').checked && eras.length){
-        const rel = eras.filter(er => er.dynasty===d && er.e>=r.在位起 && er.s<=r.在位止).sort((a,b)=>a.s-b.s);
-        rel.forEach(er=>{
-          const sx = scale(Math.max(er.s, r.在位起, customStart??-Infinity));
-          const ex = scale(Math.min(er.e, r.在位止, customEnd??Infinity));
-          const w = Math.max(2, ex - sx);
-          const ey = y + 4;
-          const eh = rowH - 8;
-          const eRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      if($('#showEra').checked && eras.length){
+        var rel = eras.filter(function(er){ return er.dynasty===d && er.e>=r.在位起 && er.s<=r.在位止 }).sort(function(a,b){return a.s-b.s});
+        rel.forEach(function(er){
+          var sx = scale(Math.max(er.s, r.在位起, customStart!=null?customStart:-Infinity));
+          var ex = scale(Math.min(er.e, r.在位止, customEnd!=null?customEnd:Infinity));
+          var w = Math.max(2, ex - sx);
+          var ey = y + 4;
+          var eh = rowH - 8;
+          var eRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
           eRect.setAttribute('x', sx); eRect.setAttribute('y', ey); eRect.setAttribute('width', w); eRect.setAttribute('height', eh); eRect.setAttribute('rx',3); eRect.setAttribute('class','era');
-          eRect.addEventListener('mousemove', ev => { showTip(`<strong>${er.name}</strong>（${d}）<br/>${er.s} — ${er.e}`, ev.clientX, ev.clientY) });
+          eRect.addEventListener('mousemove', function(ev){ showTip('<strong>'+er.name+'</strong>（'+d+'）<br/>'+er.s+' — '+er.e, ev.clientX, ev.clientY) });
           eRect.addEventListener('mouseleave', hideTip);
           barsLayer.appendChild(eRect);
           if (w > 44) {
-            const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+            var t = document.createElementNS('http://www.w3.org/2000/svg','text');
             t.setAttribute('x', sx+4); t.setAttribute('y', ey+eh*0.68); t.setAttribute('class','label');
             t.textContent = er.name; barsLayer.appendChild(t);
           }
@@ -264,37 +301,46 @@ function draw(){
     cursorY += groups[d].length*(rowH+gap)+groupGap;
   });
 
-  const axisLine=document.createElementNS('http://www.w3.org/2000/svg','line');
-  const H=svg.getAttribute('height'); const axisY=H-40;
-  axisLine.setAttribute('x1',200); axisLine.setAttribute('x2',W-24); axisLine.setAttribute('y1',axisY); axisLine.setAttribute('y2',axisY); axisLine.setAttribute('class','axis');
+  var axisLine=document.createElementNS('http://www.w3.org/2000/svg','line');
+  var H=$('#timeline').getAttribute('height'); var axisY2=H-40;
+  axisLine.setAttribute('x1',200); axisLine.setAttribute('x2',W-24); axisLine.setAttribute('y1',axisY2); axisLine.setAttribute('y2',axisY2); axisLine.setAttribute('class','axis');
   barsLayer.appendChild(axisLine);
-  const step2=niceStep(range); const startTick2=Math.ceil(minYear/step2)*step2;
-  for(let t=startTick2;t<=maxYear;t+=step2){
-    const x=leftPad+((t-minYear)/range)*(W-leftPad-rightPad);
-    const tick=document.createElementNS('http://www.w3.org/2000/svg','line');
-    tick.setAttribute('x1',x); tick.setAttribute('x2',x); tick.setAttribute('y1',axisY); tick.setAttribute('y2',axisY+6); tick.setAttribute('class','axis'); barsLayer.appendChild(tick);
-    const lbl=document.createElementNS('http://www.w3.org/2000/svg','text');
-    lbl.setAttribute('x',x); lbl.setAttribute('y',axisY+18); lbl.setAttribute('text-anchor','middle'); lbl.setAttribute('class','axis');
-    lbl.textContent=t<0?`前${-t}`:`${t}`; barsLayer.appendChild(lbl);
+  var step2=niceStep(range); var startTick2=Math.ceil(minYear/step2)*step2;
+  for(var t=startTick2;t<=maxYear;t+=step2){
+    var x=leftPad+((t-minYear)/range)*(W-leftPad-rightPad);
+    var tick=document.createElementNS('http://www.w3.org/2000/svg','line');
+    tick.setAttribute('x1',x); tick.setAttribute('x2',x); tick.setAttribute('y1',axisY2); tick.setAttribute('y2',axisY2+6); tick.setAttribute('class','axis'); barsLayer.appendChild(tick);
+    var lbl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    lbl.setAttribute('x',x); lbl.setAttribute('y',axisY2+18); lbl.setAttribute('text-anchor','middle'); lbl.setAttribute('class','axis');
+    lbl.textContent=t<0?('前'+(-t)):(''+t); barsLayer.appendChild(lbl);
   }
-  S('#result').style.display='';
+  $('#result').style.display='';
 }
 
 document.getElementById('btnAdd').addEventListener('click',addDyn);
-document.getElementById('btnClear').addEventListener('click',()=>{pickedDynasties=[];renderChips();draw()});
+document.getElementById('btnClear').addEventListener('click',function(){pickedDynasties=[];renderChips();draw()});
 document.getElementById('btnApplyRange').addEventListener('click',applyRange);
 document.getElementById('btnClearRange').addEventListener('click',clearRange);
-document.getElementById('showGrid').addEventListener('change',()=>draw());
-document.getElementById('showEra').addEventListener('change',()=>draw());
+document.getElementById('showGrid').addEventListener('change',function(){draw()});
+document.getElementById('showEra').addEventListener('change',function(){draw()});
 
-// 加载
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', loadData);
+  document.addEventListener('DOMContentLoaded', function(){ console.log('[boot] DOM ready'); loadData(); });
 } else {
   loadData();
 }
 
-document.getElementById('timeline-wrap').addEventListener('mouseleave',()=>{document.getElementById('tooltip').classList.remove('show')});
+// watchdog：3秒后还在“正在加载数据…”就提示可能的原因
+setTimeout(function(){
+  var st=$('#status').textContent||'';
+  if(/正在加载数据/.test(st)){
+    showErr('长时间加载中：1) 确认 emperors.xlsx 与 index.html 在同一目录；2) 若仓库启用子路径，请确保以相对路径加载；3) 检查浏览器控制台是否有脚本/网络错误。');
+  }
+}, 3000);
+
+document.getElementById('timeline-wrap').addEventListener('mouseleave',function(){document.getElementById('tooltip').classList.remove('show')});
+console.log("[boot] script end");
+})();
 </script>
 </body>
 </html>
