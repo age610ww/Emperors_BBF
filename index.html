@@ -52,7 +52,7 @@
       <div class="status" id="status">正在加载数据…</div>
     </div>
     <div style="display:flex; flex-direction:column; gap:8px;">
-      <div class="status">筛选时间段（支持 -74.9 / 125.12 这种“年.月”格式）</div>
+      <div class="status">筛选时间段</div>
       <div class="row" style="gap:8px;">
         <input id="startYear" type="number" placeholder="起始年" style="width:160px;">
         <span class="status">到</span>
@@ -61,13 +61,13 @@
         <button class="btn secondary" id="btnClearRange">清除</button>
       </div>
       <label style="user-select:none; display:flex; align-items:center; gap:8px; margin-top:4px;">
-        <input id="autoPick" type="checkbox" checked> 自动选朝代（时间筛选后自动挑选所有相交的朝代）
+        <input id="autoPick" type="checkbox" checked> 自动选朝代
       </label>
       <label style="user-select:none; display:flex; align-items:center; gap:8px; margin-top:4px;">
-        <input id="showGrid" type="checkbox" checked> 显示网格（竖直刻度线 + 每行水平线）
+        <input id="showGrid" type="checkbox" checked> 显示网格
       </label>
       <label style="user-select:none; display:flex; align-items:center; gap:8px; margin-top:4px;">
-        <input id="showEra" type="checkbox"> 显示年号（来自 emperors.xlsx 的“年号”工作表）
+        <input id="showEra" type="checkbox"> 显示年号
       </label>
       <div class="legend"><span><span class="swatch"></span>年号区间</span></div>
     </div>
@@ -80,8 +80,8 @@
 
 <div id="tooltip" class="tooltip"></div>
 
-<!-- 兼容加载 XLSX -->
-<script>(function(){const urls=['./xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js','https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js','https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];let i=0;function tryLoad(){if(window.XLSX||i>=urls.length)return;const s=document.createElement('script');s.src=urls[i++];s.async=true;s.onerror=tryLoad;document.head.appendChild(s);setTimeout(()=>{if(!window.XLSX)tryLoad()},1200)}tryLoad()})()</script>
+<!-- 只用一个可靠 CDN，避免脚本加载失败造成“卡在加载中” -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
 const XLSX_URL='emperors.xlsx';
@@ -95,12 +95,11 @@ function niceStep(range){const raw=range/8;const p=Math.pow(10,Math.floor(Math.l
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
 
 let rows=[], dynSet=new Set(), pickedDynasties=[], customStart=null, customEnd=null;
-const dynRangeMap=new Map(); let loaded=false; let eras=[];
+const dynRangeMap=new Map(); let eras=[];
 
-async function waitXLSX(){for(let t=0;t<60&&!window.XLSX;t++)await new Promise(r=>setTimeout(r,100));if(!window.XLSX)throw new Error('XLSX 脚本未加载（检查网络或 CDN）')}
 async function loadData(){
   try{
-    await waitXLSX();
+    if(!window.XLSX) throw new Error('XLSX 脚本未加载');
     const resp=await fetch(XLSX_URL,{cache:'no-store'});
     if(!resp.ok)throw new Error('无法加载 '+XLSX_URL+' (HTTP '+resp.status+')');
     const buf=await resp.arrayBuffer();
@@ -136,15 +135,24 @@ async function loadData(){
     const sel=S('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
     [...dynSet].sort((a,b)=>{const ra=dynRangeMap.get(a),rb=dynRangeMap.get(b);return (ra?ra.start:Infinity)-(rb?rb.start:Infinity)})
       .forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o)});
-    S('#status').textContent='加载完成' + (eras.length? ' · 年号数据可用' : ' · 未提供年号表');
-    loaded=true;
+    S('#status').textContent='加载完成' + (eras.length? ' · 年号可用' : '');
   }catch(e){ console.error(e); S('#status').textContent='加载失败：'+e.message }
 }
 
-function addDyn(){ if(!loaded) return; const v=S('#dynSelect').value; if(!v || pickedDynasties.includes(v)) return;
+function addDyn(){ const v=S('#dynSelect').value; if(!v || pickedDynasties.includes(v)) return;
   pickedDynasties.push(v); pickedDynasties.sort((a,b)=>{const ra=dynRangeMap.get(a),rb=dynRangeMap.get(b);return (ra?ra.start:Infinity)-(rb?rb.start:Infinity)}); renderChips(); draw(); }
 function removeDyn(v){ pickedDynasties=pickedDynasties.filter(x=>x!==v); renderChips(); draw(); }
-function renderChips(){ const wrap=S('#chips'); wrap.innerHTML=''; pickedDynasties.forEach(d=>{ const chip=document.createElement('span'); chip.className='chip'; const range=dynRangeMap.get(d); const txt=range?`（${range.start<0?`前${Math.abs(Math.trunc(range.start))}`:Math.trunc(range.start)} — ${range.end<0?`前${Math.abs(Math.trunc(range.end))}`:Math.trunc(range.end)}）`:''; chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}${txt}<button class='rm' title='移除'>×</button>`; chip.querySelector('.rm').onclick=()=>removeDyn(d); wrap.appendChild(chip) }) }
+function renderChips(){
+  const wrap=S('#chips'); wrap.innerHTML='';
+  pickedDynasties.forEach(d=>{
+    const chip=document.createElement('span'); chip.className='chip';
+    const range=dynRangeMap.get(d);
+    const txt=range?`（${range.start<0?`前${Math.abs(Math.trunc(range.start))}`:Math.trunc(range.start)} — ${range.end<0?`前${Math.abs(Math.trunc(range.end))}`:Math.trunc(range.end)}）`:'';
+    chip.innerHTML=`<span class='dot' style='background:${hashColor(d)}'></span>${d}${txt}<button class='rm' title='移除'>×</button>`;
+    chip.querySelector('.rm').addEventListener('click',()=>removeDyn(d));
+    wrap.appendChild(chip);
+  });
+}
 function parseInput(val){ const [y,m]=parseYearPiece(val); if(y==null) return null; return m==null?y:endAsFloat(y,m) }
 function autoPickByRange(){ if(!S('#autoPick').checked) return; const s=customStart!=null?customStart:-Infinity; const e=customEnd!=null?customEnd:Infinity; const matches=[]; dynRangeMap.forEach((rng,dyn)=>{ if(rng.end>=s && rng.start<=e) matches.push(dyn) }); matches.sort((a,b)=>{ const ra=dynRangeMap.get(a),rb=dynRangeMap.get(b); return (ra?ra.start:Infinity)-(rb?rb.start:Infinity) }); pickedDynasties=matches; renderChips() }
 function applyRange(){ customStart=S('#startYear').value?parseInput(S('#startYear').value):null; customEnd=S('#endYear').value?parseInput(S('#endYear').value):null; if(customStart!=null && customEnd!=null && customStart>customEnd) [customStart,customEnd]=[customEnd,customStart]; autoPickByRange(); draw(); const res=S('#result'); if(res&&res.style.display!=='none') res.scrollIntoView({behavior:'smooth',block:'start'}) }
@@ -260,8 +268,8 @@ function draw(){
   const H=svg.getAttribute('height'); const axisY=H-40;
   axisLine.setAttribute('x1',200); axisLine.setAttribute('x2',W-24); axisLine.setAttribute('y1',axisY); axisLine.setAttribute('y2',axisY); axisLine.setAttribute('class','axis');
   barsLayer.appendChild(axisLine);
-  const startTick2=Math.ceil(minYear/step)*step;
-  for(let t=startTick2;t<=maxYear;t+=step){
+  const step2=niceStep(range); const startTick2=Math.ceil(minYear/step2)*step2;
+  for(let t=startTick2;t<=maxYear;t+=step2){
     const x=leftPad+((t-minYear)/range)*(W-leftPad-rightPad);
     const tick=document.createElementNS('http://www.w3.org/2000/svg','line');
     tick.setAttribute('x1',x); tick.setAttribute('x2',x); tick.setAttribute('y1',axisY); tick.setAttribute('y2',axisY+6); tick.setAttribute('class','axis'); barsLayer.appendChild(tick);
@@ -278,7 +286,14 @@ document.getElementById('btnApplyRange').addEventListener('click',applyRange);
 document.getElementById('btnClearRange').addEventListener('click',clearRange);
 document.getElementById('showGrid').addEventListener('change',()=>draw());
 document.getElementById('showEra').addEventListener('change',()=>draw());
-loadData();
+
+// 加载
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadData);
+} else {
+  loadData();
+}
+
 document.getElementById('timeline-wrap').addEventListener('mouseleave',()=>{document.getElementById('tooltip').classList.remove('show')});
 </script>
 </body>
