@@ -331,8 +331,78 @@ function draw(){
       rect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
 
       // eras — 不越界 + 防重叠 + 缩放小隐藏短文字
-      if($('#showEra').checked && eras.length){
+      
+if($('#showEra').checked && eras.length){
         var rel=eras.filter(function(er){return er.dynasty===d && er.emperor===r.姓名 && er.e>=r.在位起 && er.s<=r.在位止}).sort(function(a,b){return a.s-b.s});
+        var clipped = [];
+        rel.forEach(function(er){
+          var s=Math.max(er.s,r.在位起,customStart!=null?customStart:-Infinity);
+          var e=Math.min(er.e,r.在位止,customEnd!=null?customEnd:Infinity);
+          if(e>=s){ clipped.push({name:er.name, s:s, e:e}); }
+        });
+        if(clipped.length){
+          var pad=3, eg1=ex1+pad, eg2=ex2-pad;
+          var laneW = Math.max(0, eg2 - eg1);
+          var minRectPx = 1;
+          var minGapPx = Math.max(3, Math.round(8 * zoom));
+          var n = clipped.length;
+          var gapsTotal = (n>0 ? (n-1)*minGapPx : 0);
+          var available = Math.max(0, laneW - gapsTotal);
+
+          var raw = clipped.map(function(er){return Math.max(minRectPx, Math.abs(scale(er.e) - scale(er.s)));});
+          var target = raw.slice();
+          var sumRaw = target.reduce(function(a,b){return a+b}, 0);
+
+          if(available <= 0){
+            target = new Array(n).fill(minRectPx);
+          }else if(sumRaw > available){
+            var k = available / sumRaw;
+            for(var i=0;i<n;i++){ target[i] = Math.max(minRectPx, Math.floor(target[i] * k)); }
+            var cur = target.reduce(function(a,b){return a+b}, 0);
+            var delta = available - cur, idx=0;
+            while(delta!==0 && n>0){
+              if(delta>0){ target[idx]+=1; delta-=1; }
+              else if(target[idx]>minRectPx){ target[idx]-=1; delta+=1; }
+              idx=(idx+1)%n;
+            }
+          }
+
+          var sxCursor = eg1;
+          for(var i=0;i<n;i++){
+            var er2 = clipped[i];
+            var wpx = target[i];
+            var sx2 = sxCursor;
+            var ex2b = Math.min(eg2, sx2 + wpx);
+
+            var ey2=y+5, eh2=rowH-10;
+            var fill2=getEraColor(d), stroke2=darken(fill2,-40);
+
+            var eRect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+            eRect.setAttribute('x',sx2);eRect.setAttribute('y',ey2);
+            eRect.setAttribute('width',Math.max(0.1,ex2b-sx2));
+            eRect.setAttribute('height',eh2);eRect.setAttribute('rx',6);
+            eRect.setAttribute('fill',fill2); eRect.setAttribute('stroke',stroke2); eRect.setAttribute('stroke-width','1');
+            (function(erCopy){
+              eRect.addEventListener('mousemove', function(ev2){ var tip=document.getElementById('tip'); tip.style.display='block'; tip.style.left=(ev2.clientX+12)+'px'; tip.style.top=(ev2.clientY+12)+'px'; tip.innerHTML = '<strong>'+erCopy.name+'</strong>：'+ yr(erCopy.s) +' — '+ yr(erCopy.e); });
+            })(er2);
+            eRect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
+            barsSvg.appendChild(eRect);
+
+            var showText = false;
+            var pxWidth = ex2b - sx2;
+            if(zoom < 1.6)      showText = pxWidth >= 60;
+            else if(zoom < 2.3) showText = pxWidth >= 42;
+            else                showText = pxWidth >= 30;
+            if(showText){
+              var t=document.createElementNS('http://www.w3.org/2000/svg','text');
+              t.setAttribute('x',(sx2+ex2b)/2); t.setAttribute('y',ey2+eh2*0.68); t.setAttribute('text-anchor','middle'); t.setAttribute('class','label');
+              t.textContent=er2.name; barsSvg.appendChild(t);
+            }
+            sxCursor = ex2b + minGapPx;
+            if(sxCursor > eg2) break;
+          }
+        }
+      }
         var snapped=[], prevEnd=null;
         rel.forEach(function(er){
           // 严格裁剪到皇帝在位区间内
