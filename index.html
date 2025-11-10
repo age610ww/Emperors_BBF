@@ -343,35 +343,32 @@ function draw(){
         });
 
         var minEraPx=32;
-var minGapPx = Math.max(6, 8 * zoom); // 缩放时动态调整最小间距
+var minGapPx = Math.max(6, 8 * zoom);
 var nextAllowed = ex1 + minGapPx;
         snapped.forEach(function(er){
           var sx=scale(er.s), ex=scale(er.e);
-          // 以中点定位，再保证在 emperor 边界内
-          var desiredCx=(sx+ex)/2, w=Math.max(minEraPx, Math.abs(ex-sx)), half=w/2;
-          sx=desiredCx-half; ex=desiredCx+half;
 
-          // 保证完全在皇帝条内部
-          var pad=3, eg1=ex1+pad, eg2=ex2-pad;
-          // 若最小宽度超过容纳区间，则缩到区间宽度
-          var maxW = eg2 - eg1;
-          if(w > maxW){ sx = eg1; ex = eg2; w = maxW; }
-          // 首次边界夹紧
-          if(sx < eg1){ ex += (eg1 - sx); sx = eg1; }
-          if(ex > eg2){ sx -= (ex - eg2); ex = eg2; }
+// 使用严格非重叠布局（按顺序排列，强制最小间距和最小宽度）
+var sx0 = scale(er.s), ex0 = scale(er.e);
+var rawW = Math.abs(ex0 - sx0);
 
-          // 与前一个年号防重叠：右推，但推后再做一次边界夹紧（防止越界）
-          if(sx < nextAllowed){
-            var shift = nextAllowed - sx;
-            sx += shift; ex += shift;
-            if(ex > eg2){ // 若推后越界，回缩到右边界，并把左边跟着回退，仍保证不小于最小宽度
-              var overflow = ex - eg2;
-              ex = eg2; sx = Math.max(eg1, sx - overflow);
-            }
-          }
-          nextAllowed = ex + minGapPx;
+// emperor 内部可用空间
+var pad=3, eg1=ex1+pad, eg2=ex2-pad;
+var maxW = Math.max(0, eg2 - eg1);
 
-          var ey=y+5, eh=rowH-10;
+// 年号条目标宽度（夹在 [minEraPx, maxW]）
+var w = Math.min(maxW, Math.max(minEraPx, rawW));
+
+// 从 nextAllowed 起放置，且不得越过右边界；如空间不足则尽量缩短
+var sx = Math.max(eg1, nextAllowed);
+if (sx + w > eg2) {
+  w = Math.max(0, eg2 - sx);
+}
+var ex = sx + w;
+
+// 如最终宽度太小（例如皇帝区间本身很短），直接跳过绘制该年号条
+if (w < 4) { nextAllowed = sx + w; continue; }
+var ey=y+5, eh=rowH-10;
           var fill=getEraColor(d), stroke=darken(fill,-40);
 
           var eRect=document.createElementNS('http://www.w3.org/2000/svg','rect');
