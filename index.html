@@ -1,10 +1,9 @@
-
 <!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>中国皇帝时间轴（年号不越界 · 小倍数短年号隐藏文字）</title>
+<title>中国皇帝时间轴（仅改年号防重叠 · 固定读取 emperors.xlsx）</title>
 <style>
 :root{--bg:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--axis:#9ca3af;--grid-v:#e5e7eb;--grid-h:#f3f4f6;}
 *{box-sizing:border-box}
@@ -93,8 +92,9 @@ svg{display:block;background:#fff}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 (function(){
-const XLSX_URL = 'emperors.xlsx';
+const XLSX_URL = 'emperors.xlsx'; // 只从同目录读取
 function $(q,root){return (root||document).querySelector(q)}
+function statusMsg(msg){ $('#status').textContent = msg; }
 
 // ========= palettes =========
 const EMP_PALETTE = [
@@ -124,25 +124,11 @@ function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
 // ===== state
 var rows=[], dynSet={}, pickedDynasties=[], dynRangeMap={}, eras=[];
 var customStart=null, customEnd=null, zoom=1;
-var dynColorsEmp = JSON.parse(localStorage.getItem('dynColorsEmp') || '{}');
-var dynColorsEra = JSON.parse(localStorage.getItem('dynColorsEra') || '{}');
-var defEmp = JSON.parse(localStorage.getItem('defEmp_addOrder') || '{}');
-var defEra = JSON.parse(localStorage.getItem('defEra_addOrder') || '{}');
-var paletteCursor = parseInt(localStorage.getItem('paletteCursor') || '0', 10) || 0;
-
-var editingDyn=''; // 当前编辑朝代
+var dynColorsEmp = {}, dynColorsEra = {}, defEmp={}, defEra={}, paletteCursor=0;
+var editingDyn='';
 
 function getEmpColor(d){ return dynColorsEmp[d] || defEmp[d] || '#8b5cf6'; }
 function getEraColor(d){ return dynColorsEra[d] || defEra[d] || '#d7c8ff'; }
-function saveDefaults(){ localStorage.setItem('defEmp_addOrder', JSON.stringify(defEmp)); localStorage.setItem('defEra_addOrder', JSON.stringify(defEra)); localStorage.setItem('paletteCursor', String(paletteCursor)); }
-function updateChipControls(){
-  const ctr = $('#chipControls');
-  if(!editingDyn){ ctr.classList.remove('active'); $('#editingName').textContent='（尚未选择）'; return; }
-  ctr.classList.add('active'); $('#editingName').textContent = editingDyn+'（皇帝色/年号色）';
-  $('#editEmp').value = getEmpColor(editingDyn); $('#editEra').value = getEraColor(editingDyn);
-}
-
-// 在“添加朝代”时给未分配的朝代挑一个未被使用的颜色
 function assignDefaultForDynasty(d){
   if(defEmp[d]) return;
   const used = new Set(Object.values(defEmp));
@@ -154,55 +140,74 @@ function assignDefaultForDynasty(d){
   const emp = EMP_PALETTE[idx];
   defEmp[d] = emp; defEra[d] = eraFromEmp(emp);
   paletteCursor = (idx + 1) % EMP_PALETTE.length;
-  saveDefaults();
 }
 
-// ===== load
-function loadData(){
-  fetch(XLSX_URL,{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('无法加载 emperors.xlsx');return r.arrayBuffer()}).then(function(buf){
-    var wb=XLSX.read(buf,{type:'array'});
-    rows=[];var rowIndex=0;dynSet={};dynRangeMap={};
-    wb.SheetNames.forEach(function(sn){
-      if(sn==='年号'||/^nianhao$/i.test(sn))return;
-      var ws=wb.Sheets[sn]; if(!ws)return;
-      var json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});
-      json.forEach(function(r){
-        var p1=parseYearPiece(r['在位起']||'');var sy=p1[0],sm=p1[1];
-        var p2=parseYearPiece(r['在位止']||'');var ey=p2[0],em=p2[1];
-        var s=startAsFloat(sy,sm), e=endAsFloat(ey,em);
-        var rec={朝代:r['朝代']||'',姓名:r['姓名']||'',常用称呼:r['常用称呼']||'',在位起:s,在位止:e,sY:sy,sM:sm,eY:ey,eM:em,idx:rowIndex++};
-        if(rec.朝代 && rec.姓名 && s!=null && e!=null){
-          rows.push(rec); dynSet[rec.朝代]=true;
-          if(!dynRangeMap[rec.朝代]) dynRangeMap[rec.朝代]={start:s,end:e};
-          dynRangeMap[rec.朝代].start=Math.min(dynRangeMap[rec.朝代].start,s);
-          dynRangeMap[rec.朝代].end=Math.max(dynRangeMap[rec.朝代].end,e);
-        }
-      });
+function updateChipControls(){
+  const ctr = $('#chipControls');
+  if(!editingDyn){ ctr.classList.remove('active'); $('#editingName').textContent='（尚未选择）'; return; }
+  ctr.classList.add('active'); $('#editingName').textContent = editingDyn+'（皇帝色/年号色）';
+  $('#editEmp').value = getEmpColor(editingDyn); $('#editEra').value = getEraColor(editingDyn);
+}
+
+// ===== load exact file
+function parseWorkbook(wb){
+  rows=[];dynSet={};dynRangeMap={};eras=[];
+  var rowIndex=0;
+  wb.SheetNames.forEach(function(sn){
+    if(sn==='年号'||/^nianhao$/i.test(sn))return;
+    var ws=wb.Sheets[sn]; if(!ws)return;
+    var json=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});
+    json.forEach(function(r){
+      var p1=parseYearPiece(r['在位起']||'');var sy=p1[0],sm=p1[1];
+      var p2=parseYearPiece(r['在位止']||'');var ey=p2[0],em=p2[1];
+      var s=startAsFloat(sy,sm), e=endAsFloat(ey,em);
+      var rec={朝代:r['朝代']||'',姓名:r['姓名']||'',常用称呼:r['常用称呼']||'',在位起:s,在位止:e,sY:sy,sM:sm,eY:ey,eM:em,idx:rowIndex++};
+      if(rec.朝代 && rec.姓名 && s!=null && e!=null){
+        rows.push(rec); dynSet[rec.朝代]=true;
+        if(!dynRangeMap[rec.朝代]) dynRangeMap[rec.朝代]={start:s,end:e};
+        dynRangeMap[rec.朝代].start=Math.min(dynRangeMap[rec.朝代].start,s);
+        dynRangeMap[rec.朝代].end=Math.max(dynRangeMap[rec.朝代].end,e);
+      }
     });
+  });
 
-    eras=[];
-    var ns=wb.Sheets['年号']||wb.Sheets['nianhao'];
-    if(ns){
-      XLSX.utils.sheet_to_json(ns,{raw:true,defval:''}).forEach(function(r){
-        var s=Number(r['公元起']), e=Number(r['公元止']);
-        var d=String(r['朝代']||'').trim(); var nm=String(r['年号']||'').trim(); var emp=String(r['姓名']||'').trim();
-        if(d && nm && emp && isFinite(s) && isFinite(e) && e>=s){ eras.push({dynasty:d, name:nm, emperor:emp, s:s, e:e}) }
-      });
-    }
+  var ns=wb.Sheets['年号']||wb.Sheets['nianhao'];
+  if(ns){
+    XLSX.utils.sheet_to_json(ns,{raw:true,defval:''}).forEach(function(r){
+      var s=Number(r['公元起']), e=Number(r['公元止']);
+      var d=String(r['朝代']||'').trim(); var nm=String(r['年号']||'').trim(); var emp=String(r['姓名']||'').trim();
+      if(d && nm && emp && isFinite(s) && isFinite(e) && e>=s){ eras.push({dynasty:d, name:nm, emperor:emp, s:s, e:e}) }
+    });
+  }
 
-    var list=Object.keys(dynSet).sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start});
-    var sel=$('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
-    list.forEach(function(d){ var o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o)});
+  var list=Object.keys(dynSet).sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start});
+  var sel=$('#dynSelect'); sel.innerHTML='<option value="">选择一个朝代</option>';
+  list.forEach(function(d){ var o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o)});
 
-    $('#status').textContent='加载完成 · 皇帝'+rows.length+' · 年号'+eras.length;
-  }).catch(function(e){ $('#status').textContent='加载失败：'+e.message });
+  statusMsg('加载完成 · 皇帝'+rows.length+' · 年号'+eras.length);
+  $('#result').style.display='';
+  if($('#autoPick').checked){autoPickByRange();draw();}
 }
 
-// ===== chips
+function loadData(){
+  statusMsg('正在加载 emperors.xlsx …');
+  fetch(XLSX_URL, {cache:'no-store'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.arrayBuffer();
+  }).then(function(buf){
+    var wb=XLSX.read(buf,{type:'array'});
+    parseWorkbook(wb);
+  }).catch(function(e){
+    statusMsg('加载失败：'+e.message);
+    console.error(e);
+  });
+}
+
+// ===== chips & interactions
 function renderChips(){
   var wrap=$('#chips'); wrap.innerHTML='';
   pickedDynasties.forEach(function(d){
-    var span=document.createElement('span'); span.className='chip'+(editingDyn===d?' active':'');
+    var span=document.createElement('span'); span.className='chip'+(editingDyn===d?' active':''); 
     var rng=dynRangeMap[d]; var txt=rng?('（'+Math.trunc(rng.start)+' — '+Math.trunc(rng.end)+'）'):'';
     span.innerHTML="<span class='dot' style='background:"+getEmpColor(d)+"'></span>"+d+txt+"<button class='rm' title='移除'>×</button>";
     span.addEventListener('click',function(e){
@@ -219,11 +224,9 @@ function renderChips(){
   });
   updateChipControls();
 }
-
-// ===== interaction
 function addDyn(){
   var v=$('#dynSelect').value; if(!v) return; if(pickedDynasties.indexOf(v)>=0) return;
-  assignDefaultForDynasty(v); // 分配默认色
+  assignDefaultForDynasty(v); 
   pickedDynasties.push(v);
   editingDyn=v; renderChips(); draw();
 }
@@ -241,13 +244,12 @@ $('#showGrid').addEventListener('change',draw);
 $('#showEra').addEventListener('change',draw);
 $('#zoom').addEventListener('input',function(e){ zoom=parseFloat(e.target.value)||1; $('#zoomVal').textContent=(zoom.toFixed(1)+'×'); draw(); });
 
-// 颜色调整：作用到当前选中的 chip 所属朝代
-$('#editEmp').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEmp[editingDyn]=this.value; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); renderChips(); draw(); });
-$('#editEra').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEra[editingDyn]=this.value; localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); draw(); });
-$('#btnResetOne').addEventListener('click',function(){ if(!editingDyn) return; delete dynColorsEmp[editingDyn]; delete dynColorsEra[editingDyn]; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); renderChips(); draw(); });
-$('#btnResetAll').addEventListener('click',function(){ dynColorsEmp={}; dynColorsEra={}; localStorage.removeItem('dynColorsEmp'); localStorage.removeItem('dynColorsEra'); renderChips(); draw(); });
+$('#editEmp').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEmp[editingDyn]=this.value; renderChips(); draw(); });
+$('#editEra').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEra[editingDyn]=this.value; draw(); });
+$('#btnResetOne').addEventListener('click',function(){ if(!editingDyn) return; delete dynColorsEmp[editingDyn]; delete dynColorsEra[editingDyn]; renderChips(); draw(); });
+$('#btnResetAll').addEventListener('click',function(){ dynColorsEmp={}; dynColorsEra={}; renderChips(); draw(); });
 
-// ===== draw (左右留白 + 年号不越界 + 小倍数短年号隐藏文字)
+// ===== draw（统一压缩 + 顺序布局：所有年号都画出，不重叠；文字按宽度阈值隐藏/显示）
 function draw(){
   var tip=$('#tip'); tip.style.display='none';
   var list=rows.filter(function(r){return pickedDynasties.indexOf(r.朝代)>=0});
@@ -275,7 +277,6 @@ function draw(){
 
   function scale(y){ return marginPx + ((y-minYear)/fullRange) * (contentW - marginPx*2); }
 
-  // 刻度：zoom=1 时 5 年；每 +1 减 1；最小 1
   var step = Math.max(1, Math.floor(6 - zoom));
   var startTick=Math.ceil(minYear/step)*step;
   if($('#showGrid').checked){
@@ -330,10 +331,12 @@ function draw(){
       rect.addEventListener('mousemove', function(ev){ var tip=document.getElementById('tip'); tip.style.display='block'; tip.style.left=(ev.clientX+12)+'px'; tip.style.top=(ev.clientY+12)+'px'; tip.innerHTML = '<strong>'+labelText+'</strong>'; });
       rect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
 
-      // eras — 不越界 + 防重叠 + 缩放小隐藏短文字
+      // eras — 统一压缩 + 顺序布局（全部显示，不重叠；文字按宽度阈值显示/隐藏）
       if($('#showEra').checked && eras.length){
-        
-        var rel=eras.filter(function(er){return er.dynasty===d && er.emperor===r.姓名 && er.e>=r.在位起 && er.s<=r.在位止}).sort(function(a,b){return a.s-b.s});
+        // 1) 过滤并按皇帝在位期裁剪
+        var rel=eras
+          .filter(function(er){return er.dynasty===d && er.emperor===r.姓名 && er.e>=r.在位起 && er.s<=r.在位止})
+          .sort(function(a,b){return a.s-b.s});
         var clipped = [];
         rel.forEach(function(er){
           var s=Math.max(er.s,r.在位起,customStart!=null?customStart:-Infinity);
@@ -343,13 +346,13 @@ function draw(){
         if(clipped.length){
           var pad=3, eg1=ex1+pad, eg2=ex2-pad;
           var laneW = Math.max(0, eg2 - eg1);
-          var minRectPx = 1; // 所有年号条都画出来
-          var minGapPx  = Math.max(3, Math.round(8 * zoom)); // 随缩放的最小间距
+
+          var minRectPx = 1;
+          var minGapPx  = Math.max(3, Math.round(8 * zoom));
           var n = clipped.length;
           var gapsTotal = (n>0 ? (n-1)*minGapPx : 0);
           var available = Math.max(0, laneW - gapsTotal);
 
-          // 原始像素宽
           var raw = clipped.map(function(er){
             return Math.max(minRectPx, Math.abs(scale(er.e) - scale(er.s)));
           });
@@ -372,7 +375,6 @@ function draw(){
             }
           }
 
-          // 顺序摆放（绝不重叠；文字按阈值显示）
           var sxCursor = eg1;
           for(var i=0;i<n;i++){
             var er2 = clipped[i];
@@ -408,9 +410,6 @@ function draw(){
             if(sxCursor > eg2) break;
           }
         }
-
-          }
-        });
       }
     });
 
@@ -433,18 +432,22 @@ function draw(){
   });
   for(var t=startTick2;t<=maxYear;t+=step2){
     var x=scale(t);
-    var tick=document.createElementNS('http://www.w3.org/2000/svg','line');
-    tick.setAttribute('x1',x);tick.setAttribute('x2',x);tick.setAttribute('y1',axisY2);tick.setAttribute('y2',axisY2+6);tick.setAttribute('class','axis');barsSvg.appendChild(tick);
-    var lbl=document.createElementNS('http://www.w3.org/2000/svg','text');
-    lbl.setAttribute('x',x);lbl.setAttribute('y',axisY2+18);lbl.setAttribute('text-anchor','middle');lbl.setAttribute('class','axis');lbl.textContent=(t<0?('前'+(-t)):t);
-    barsSvg.appendChild(lbl);
+    var tick2=document.createElementNS('http://www.w3.org/2000/svg','line');
+    tick2.setAttribute('x1',x);tick2.setAttribute('x2',x);tick2.setAttribute('y1',axisY2);tick2.setAttribute('y2',axisY2+6);tick2.setAttribute('class','axis');barsSvg.appendChild(tick2);
+    var lbl2=document.createElementNS('http://www.w3.org/2000/svg','text');
+    lbl2.setAttribute('x',x);lbl2.setAttribute('y',axisY2+18);lbl2.setAttribute('text-anchor','middle');lbl2.setAttribute('class','axis');lbl2.textContent=(t<0?('前'+(-t)):t);
+    barsSvg.appendChild(lbl2);
   }
 
   $('#result').style.display='';
 }
 
 // ===== start
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',loadData)}else{loadData()}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', loadData);
+}else{
+  loadData();
+}
 })();
 </script>
 </body>
