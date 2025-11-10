@@ -1,10 +1,9 @@
-
 <!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>中国皇帝时间轴（年号不越界 · 小倍数短年号隐藏文字）</title>
+<title>中国皇帝时间轴（年号始终显示 · 自适应缩放防重叠）</title>
 <style>
 :root{--bg:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--axis:#9ca3af;--grid-v:#e5e7eb;--grid-h:#f3f4f6;}
 *{box-sizing:border-box}
@@ -204,7 +203,7 @@ function renderChips(){
   pickedDynasties.forEach(function(d){
     var span=document.createElement('span'); span.className='chip'+(editingDyn===d?' active':'');
     var rng=dynRangeMap[d]; var txt=rng?('（'+Math.trunc(rng.start)+' — '+Math.trunc(rng.end)+'）'):'';
-    span.innerHTML="<span class='dot' style='background:"+getEmpColor(d)+"'></span>"+d+txt+"<button class='rm' title='移除'>×</button>";
+    span.innerHTML=\"<span class='dot' style='background:\"+getEmpColor(d)+\"'></span>\"+d+txt+\"<button class='rm' title='移除'>×</button>\";
     span.addEventListener('click',function(e){
       if(e.target.classList.contains('rm')) return;
       editingDyn=d; updateChipControls(); renderChips(); draw();
@@ -247,7 +246,7 @@ $('#editEra').addEventListener('input',function(){ if(!editingDyn) return; dynCo
 $('#btnResetOne').addEventListener('click',function(){ if(!editingDyn) return; delete dynColorsEmp[editingDyn]; delete dynColorsEra[editingDyn]; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); renderChips(); draw(); });
 $('#btnResetAll').addEventListener('click',function(){ dynColorsEmp={}; dynColorsEra={}; localStorage.removeItem('dynColorsEmp'); localStorage.removeItem('dynColorsEra'); renderChips(); draw(); });
 
-// ===== draw (左右留白 + 年号不越界 + 小倍数短年号隐藏文字)
+// ===== draw (年号始终显示 + 文本按宽高自适应 + 保持在皇帝条内不重叠)
 function draw(){
   var tip=$('#tip'); tip.style.display='none';
   var list=rows.filter(function(r){return pickedDynasties.indexOf(r.朝代)>=0});
@@ -330,85 +329,83 @@ function draw(){
       rect.addEventListener('mousemove', function(ev){ var tip=document.getElementById('tip'); tip.style.display='block'; tip.style.left=(ev.clientX+12)+'px'; tip.style.top=(ev.clientY+12)+'px'; tip.innerHTML = '<strong>'+labelText+'</strong>'; });
       rect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
 
-      // eras — 不越界 + 防重叠 + 缩放小隐藏短文字
+      // eras — 不越界 + 防重叠（矩形） + 文本始终显示并自适应
       if($('#showEra').checked && eras.length){
-        // 统一压缩 + 顺序布局：所有年号条都画出，不重叠；文字按宽度阈值显示/隐藏
-        var rel=eras
-          .filter(function(er){return er.dynasty===d && er.emperor===r.姓名 && er.e>=r.在位起 && er.s<=r.在位止})
-          .sort(function(a,b){return a.s-b.s});
-        var clipped = [];
+        var rel=eras.filter(function(er){return er.dynasty===d && er.emperor===r.姓名 && er.e>=r.在位起 && er.s<=r.在位止}).sort(function(a,b){return a.s-b.s});
+        var snapped=[], prevEnd=null;
         rel.forEach(function(er){
+          // 严格裁剪到皇帝在位区间内
           var s=Math.max(er.s,r.在位起,customStart!=null?customStart:-Infinity);
           var e=Math.min(er.e,r.在位止,customEnd!=null?customEnd:Infinity);
-          if(e>=s){ clipped.push({name:er.name, s:s, e:e}); }
+          if(prevEnd!=null && s - prevEnd <= 1){ s = prevEnd; }
+          snapped.push({name:er.name,s:s,e:e}); prevEnd=e;
         });
-        if(clipped.length){
+
+        var minEraPx=32, gapPx=3;
+        var nextAllowed = ex1 + 3;
+        snapped.forEach(function(er){
+          var sx=scale(er.s), ex=scale(er.e);
+          // 以中点定位，再保证在 emperor 边界内
+          var desiredCx=(sx+ex)/2, w=Math.max(minEraPx, Math.abs(ex-sx)), half=w/2;
+          sx=desiredCx-half; ex=desiredCx+half;
+
+          // 保证完全在皇帝条内部
           var pad=3, eg1=ex1+pad, eg2=ex2-pad;
-          var laneW = Math.max(0, eg2 - eg1);
-          var minRectPx = 1; // 所有年号条都画出
-          var minGapPx  = Math.max(3, Math.round(8 * zoom)); // 最小间距随缩放
-          var n = clipped.length;
-          var gapsTotal = (n>0 ? (n-1)*minGapPx : 0);
-          var available = Math.max(0, laneW - gapsTotal);
+          // 若最小宽度超过容纳区间，则缩到区间宽度
+          var maxW = eg2 - eg1;
+          if(w > maxW){ sx = eg1; ex = eg2; w = maxW; }
+          // 首次边界夹紧
+          if(sx < eg1){ ex += (eg1 - sx); sx = eg1; }
+          if(ex > eg2){ sx -= (ex - eg2); ex = eg2; }
 
-          var raw = clipped.map(function(er){
-            return Math.max(minRectPx, Math.abs(scale(er.e) - scale(er.s)));
-          });
-          var target = raw.slice();
-          var sumRaw = target.reduce(function(a,b){return a+b}, 0);
-
-          if(available <= 0){
-            target = new Array(n).fill(minRectPx);
-          }else if(sumRaw > available){
-            var k = available / sumRaw;
-            for(var i=0;i<n;i++){
-              target[i] = Math.max(minRectPx, Math.floor(target[i] * k));
-            }
-            var cur = target.reduce(function(a,b){return a+b}, 0);
-            var delta = available - cur, idx=0;
-            while(delta!==0 && n>0){
-              if(delta>0){ target[idx]+=1; delta-=1; }
-              else if(target[idx]>minRectPx){ target[idx]-=1; delta+=1; }
-              idx=(idx+1)%n;
+          // 与前一个年号防重叠：右推，但推后再做一次边界夹紧（防止越界）
+          if(sx < nextAllowed){
+            var shift = nextAllowed - sx;
+            sx += shift; ex += shift;
+            if(ex > eg2){ // 若推后越界，回缩到右边界，并把左边跟着回退，仍保证不小于最小宽度
+              var overflow = ex - eg2;
+              ex = eg2; sx = Math.max(eg1, sx - overflow);
             }
           }
+          nextAllowed = ex + gapPx;
 
-          var sxCursor = eg1;
-          for(var i=0;i<n;i++){
-            var er2 = clipped[i];
-            var wpx = target[i];
-            var sx2 = sxCursor;
-            var ex2b = Math.min(eg2, sx2 + wpx);
+          var ey=y+5, eh=rowH-10;
+          var fill=getEraColor(d), stroke=darken(fill,-40);
 
-            var ey2=y+5, eh2=rowH-10;
-            var fill2=getEraColor(d), stroke2=darken(fill2,-40);
+          var eRect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+          eRect.setAttribute('x',sx);eRect.setAttribute('y',ey);eRect.setAttribute('width',Math.max(0.1,ex-sx));eRect.setAttribute('height',eh);eRect.setAttribute('rx',6);
+          eRect.setAttribute('fill',fill); eRect.setAttribute('stroke',stroke); eRect.setAttribute('stroke-width','1');
+          eRect.addEventListener('mousemove', function(ev){ var tip=document.getElementById('tip'); tip.style.display='block'; tip.style.left=(ev.clientX+12)+'px'; tip.style.top=(ev.clientY+12)+'px'; tip.innerHTML = '<strong>'+er.name+'</strong>：'+ yr(er.s) +' — '+ yr(er.e); });
+          eRect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
+          barsSvg.appendChild(eRect);
 
-            var eRect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-            eRect.setAttribute('x',sx2);eRect.setAttribute('y',ey2);
-            eRect.setAttribute('width',Math.max(0.1,ex2b-sx2));
-            eRect.setAttribute('height',eh2);eRect.setAttribute('rx',6);
-            eRect.setAttribute('fill',fill2); eRect.setAttribute('stroke',stroke2); eRect.setAttribute('stroke-width','1');
-            (function(erCopy){
-              eRect.addEventListener('mousemove', function(ev2){ var tip=document.getElementById('tip'); tip.style.display='block'; tip.style.left=(ev2.clientX+12)+'px'; tip.style.top=(ev2.clientY+12)+'px'; tip.innerHTML = '<strong>'+erCopy.name+'</strong>：'+ yr(erCopy.s) +' — '+ yr(erCopy.e); });
-            })(er2);
-            eRect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
-            barsSvg.appendChild(eRect);
+          // ======== 文本：始终显示；字体根据缩放、容器宽度与高度自适应；不越界 ========
+          var pxWidth = ex - sx;
+          var nameLen = Math.max(1, er.name.length);
+          var maxFontByHeight = eh * 0.62;         // 受条高度限制
+          var baseByZoom = 11 * zoom;              // 随缩放变化的基准
+          var approxFontByWidth = (pxWidth - 8) / nameLen;  // 简单按字符数估算
+          var fs = Math.min(maxFontByHeight, baseByZoom, approxFontByWidth);
+          fs = Math.max(8, Math.min(fs, 22));      // 设定可读范围
 
-            var showText = false;
-            var pxWidth = ex2b - sx2;
-            if(zoom < 1.6)      showText = pxWidth >= 60;
-            else if(zoom < 2.3) showText = pxWidth >= 42;
-            else                showText = pxWidth >= 30;
-            if(showText){
-              var t=document.createElementNS('http://www.w3.org/2000/svg','text');
-              t.setAttribute('x',(sx2+ex2b)/2); t.setAttribute('y',ey2+eh2*0.68); t.setAttribute('text-anchor','middle'); t.setAttribute('class','label');
-              t.textContent=er2.name; barsSvg.appendChild(t);
-            }
-            sxCursor = ex2b + minGapPx;
-            if(sxCursor > eg2) break;
-          }
-        }
-}
+          var t=document.createElementNS('http://www.w3.org/2000/svg','text');
+          t.setAttribute('x',(sx+ex)/2);
+          t.setAttribute('y',ey+eh/2);
+          t.setAttribute('text-anchor','middle');
+          t.setAttribute('dominant-baseline','central');
+          t.setAttribute('class','label');
+          t.setAttribute('pointer-events','none'); // 避免遮挡鼠标提示
+          t.style.fontSize = fs + 'px';
+
+          // 使用 textLength 保证文字在矩形内完全容纳（必要时压紧字距）
+          var targetTextLength = Math.max(6, pxWidth - 8);
+          t.setAttribute('lengthAdjust','spacingAndGlyphs');
+          t.setAttribute('textLength', String(targetTextLength));
+
+          t.textContent=er.name;
+          barsSvg.appendChild(t);
+        });
+      }
     });
 
     cursorY+=groups[d].length*(rowH+gap)+groupGap;
