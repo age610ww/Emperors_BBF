@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>中国皇帝时间轴（顺序配色·防重叠·悬浮起止·动态刻度）</title>
+<title>中国皇帝时间轴（按添加顺序配色·点击切换编辑·两端留白防截断）</title>
 <style>
 :root{--bg:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--axis:#9ca3af;--grid-v:#e5e7eb;--grid-h:#f3f4f6;}
 *{box-sizing:border-box}
@@ -13,7 +13,7 @@ header{padding:24px 16px 0;max-width:1280px;margin:0 auto;}
 h1{margin:0 0 8px;font-size:28px;}
 .card{max-width:1280px;margin:16px auto;background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;}
 .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-select,input[type=number],input[type=color]{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:#111827;}
+select,input[type=number]{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:#111827;}
 input[type=range]{width:220px}
 .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#111827;color:#fff;font-weight:600;cursor:pointer;}
 .btn.secondary{background:transparent;color:#111827;}
@@ -22,19 +22,22 @@ input[type=range]{width:220px}
 .group-title{fill:#1f2937;font-size:13px;font-weight:700}
 .axis text{fill:#9ca3af;font-size:12px}
 .axis line{stroke:#9ca3af}
-.grid-v{stroke:#e5e7eb;stroke-width:1;opacity:.7}
+.grid-v{stroke:#e5e7eb;stroke-width:1;opacity:.8}
 .grid-h{stroke:#f3f4f6;stroke-width:1;opacity:.9}
 .bar-outline{stroke:rgba(0,0,0,.2);stroke-width:.6;fill:none}
-.timeline-shell{display:grid;grid-template-columns:260px 1fr;gap:0;align-items:start}
+.timeline-shell{display:grid;grid-template-columns:300px 1fr;gap:0;align-items:start}
 .labels-col{position:sticky;left:0;background:#fff;border-right:1px solid #e5e7eb;z-index:5}
 .scroll-col{overflow-x:auto;overflow-y:hidden}
 svg{display:block;background:#fff}
 .chips{display:flex;flex-wrap:wrap;gap:8px;}
-.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#f3f4f6;border:1px solid #e5e7eb}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#f3f4f6;border:1.5px solid #e5e7eb;cursor:pointer;user-select:none}
 .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
 .chip .rm{cursor:pointer;border:none;background:transparent;color:#2563eb;font-weight:700}
+.chip.active{border-color:#111827;box-shadow:0 0 0 2px rgba(17,24,39,.08) inset}
 .small{font-size:12px;color:#6b7280}
 #tip{position:fixed;display:none;background:#111827;color:#fff;padding:6px 8px;border-radius:8px;font-size:12px;pointer-events:none;z-index:10}
+.controls-under{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);display:none}
+.controls-under.active{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -42,22 +45,28 @@ svg{display:block;background:#fff}
 
 <section class="card">
   <div class="row" style="align-items:flex-start;gap:16px;">
-    <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;flex-direction:column;gap:8px;flex:1 1 auto">
       <div class="row">
         <select id="dynSelect" style="min-width:260px"><option value="">加载中…</option></select>
         <button class="btn" id="btnAdd">添加朝代</button>
         <button class="btn secondary" id="btnClear">清空</button>
       </div>
       <div class="chips" id="chips"></div>
+      <div class="controls-under" id="chipControls">
+        <span class="small">当前：<strong id="editingName">（尚未选择）</strong></span>
+        <span class="small">皇帝色</span><input id="editEmp" type="color">
+        <span class="small">年号色</span><input id="editEra" type="color">
+        <button class="btn secondary" id="btnResetOne">还原该朝默认</button>
+      </div>
       <div class="status" id="status">正在加载数据…</div>
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:10px;min-width:560px">
+    <div style="display:flex;flex-direction:column;gap:10px;min-width:520px">
       <div class="row">
         <span class="small">时间段</span>
-        <input id="startYear" type="number" placeholder="起始年" style="width:140px">
+        <input id="startYear" type="number" placeholder="起始年" style="width:130px">
         <span class="small">到</span>
-        <input id="endYear" type="number" placeholder="截止年" style="width:140px">
+        <input id="endYear" type="number" placeholder="截止年" style="width:130px">
         <button class="btn" id="btnApplyRange">应用</button>
         <button class="btn secondary" id="btnClearRange">清除</button>
       </div>
@@ -65,15 +74,10 @@ svg{display:block;background:#fff}
         <label><input id="autoPick" type="checkbox" checked> 自动选朝代</label>
         <label><input id="showGrid" type="checkbox" checked> 显示网格</label>
         <label><input id="showEra" type="checkbox" checked> 显示年号</label>
-      </div>
-      <div class="row">
-        <span class="small">当前正在调整：</span><strong id="editingName" class="small">（尚未添加朝代）</strong>
-        <span class="small">皇帝色</span><input id="editEmp" type="color">
-        <span class="small">年号色</span><input id="editEra" type="color">
         <span class="small">缩放</span><input id="zoom" type="range" min="1" max="4" step="0.1" value="1"><span id="zoomVal" class="small">1.0×</span>
-        <button class="btn secondary" id="btnRestoreAll">还原默认颜色</button>
+        <button class="btn secondary" id="btnResetAll">清除我修改的颜色</button>
       </div>
-      <div class="small">说明：默认配色按“朝代加载顺序”从预设色板顺序分配，保证互不重复；你也可以只针对“最近添加的朝代”进行修改。</div>
+      <div class="small">说明：默认配色在你点“添加朝代”时即时分配（按添加顺序循环色板），点击上方标签可切换要编辑的朝代。</div>
     </div>
   </div>
 </section>
@@ -93,14 +97,13 @@ svg{display:block;background:#fff}
 const XLSX_URL = 'emperors.xlsx';
 function $(q,root){return (root||document).querySelector(q)}
 
-// ========= palettes ============
-// 手工挑选一组可读性强且差异明显的颜色（尽量避免全红问题）
+// ========= palettes =========
 const EMP_PALETTE = [
   "#8b5cf6","#60a5fa","#22c55e","#f59e0b","#ef4444","#06b6d4","#a3e635","#d946ef",
   "#10b981","#eab308","#3b82f6","#14b8a6","#f43f5e","#0ea5e9","#84cc16","#6366f1",
   "#fb7185","#f97316","#64748b","#2dd4bf","#f472b6","#93c5fd","#34d399","#facc15"
 ];
-function lightenTowardWhite(hex, ratio){ // ratio 0-1
+function lightenTowardWhite(hex, ratio){
   try{
     let c=hex.replace('#',''); if(c.length===3){c=c.split('').map(x=>x+x).join('')}
     let r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);
@@ -109,49 +112,50 @@ function lightenTowardWhite(hex, ratio){ // ratio 0-1
   }catch(e){return hex}
 }
 function eraFromEmp(emp){ return lightenTowardWhite(emp, 0.55) }
+function darken(hex, amt){try{var c=hex.replace('#',''); if(c.length===3){c=c.split('').map(x=>x+x).join('')} var r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16); r=Math.max(0,Math.min(255,r+amt)); g=Math.max(0,Math.min(255,g+amt)); b=Math.max(0,Math.min(255,b+amt)); return '#'+r.toString(16).padStart(2,'0')+g.toString(16).padStart(2,'0')+b.toString(16).padStart(2,'0');}catch(e){return hex;}}
+function fmtYear(y,m){ if(y==null) return ''; return (m? (y+'.'+String(m).padStart(2,'0')) : String(y)); }
+function yr(n){return (n<0?('前'+(-Math.trunc(n))):Math.trunc(n))}
 
 // ===== parsing utils
 function parseYearPiece(str){var s=String(str||'').trim();if(s==='')return[null,null];var m=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/);if(!m)return[Number(s.replace(/[^-0-9.]/g,'')),null];return[parseInt(m[1],10),m[2]?parseInt(m[2],10):null]}
 function startAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*((m-1)/12)}
 function endAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*(m/12)}
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
-function darken(hex, amt){try{var c=hex.replace('#',''); if(c.length===3){c=c.split('').map(x=>x+x).join('')} var r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16); r=Math.max(0,Math.min(255,r+amt)); g=Math.max(0,Math.min(255,g+amt)); b=Math.max(0,Math.min(255,b+amt)); return '#'+r.toString(16).padStart(2,'0')+g.toString(16).padStart(2,'0')+b.toString(16).padStart(2,'0');}catch(e){return hex;}}
-function fmtYear(y,m){ if(y==null) return ''; return (m? (y+'.'+String(m).padStart(2,'0')) : String(y)); }
-function yr(n){return (n<0?('前'+(-Math.trunc(n))):Math.trunc(n))}
 
 // ===== state
 var rows=[], dynSet={}, pickedDynasties=[], dynRangeMap={}, eras=[];
 var customStart=null, customEnd=null, zoom=1;
-var dynColorsEmp = JSON.parse(localStorage.getItem('dynColorsEmp') || '{}'); // 用户自定义覆盖
+var dynColorsEmp = JSON.parse(localStorage.getItem('dynColorsEmp') || '{}');
 var dynColorsEra = JSON.parse(localStorage.getItem('dynColorsEra') || '{}');
-var defEmp = JSON.parse(localStorage.getItem('defEmp') || '{}'); // 默认配色（顺序分配）
-var defEra = JSON.parse(localStorage.getItem('defEra') || '{}');
-var editingDyn=''; // 最近添加
+var defEmp = JSON.parse(localStorage.getItem('defEmp_addOrder') || '{}');
+var defEra = JSON.parse(localStorage.getItem('defEra_addOrder') || '{}');
+var paletteCursor = parseInt(localStorage.getItem('paletteCursor') || '0', 10) || 0;
+
+var editingDyn=''; // 当前编辑朝代
 
 function getEmpColor(d){ return dynColorsEmp[d] || defEmp[d] || '#8b5cf6'; }
-function getEraColor(d){ return dynColorsEra[d] || defEra[d] || '#fde68a'; }
-function updateEditingName(){ $('#editingName').textContent = editingDyn? (editingDyn+'（皇帝色/年号色）') : '（尚未添加朝代）'; $('#editEmp').value=getEmpColor(editingDyn||''); $('#editEra').value=getEraColor(editingDyn||''); }
-
-// ===== assign default colors sequentially
-function assignSequentialDefaults(dynList){
-  let usedColors=new Set(Object.values(defEmp));
-  let nextIndex = 0;
-  dynList.forEach(d=>{
-    if(!defEmp[d]){
-      // pick next unused color
-      while(nextIndex < EMP_PALETTE.length && usedColors.has(EMP_PALETTE[nextIndex])) nextIndex++;
-      let emp = EMP_PALETTE[nextIndex % EMP_PALETTE.length];
-      defEmp[d]=emp; defEra[d]=eraFromEmp(emp);
-      usedColors.add(emp); nextIndex++;
-    }
-  });
-  localStorage.setItem('defEmp', JSON.stringify(defEmp));
-  localStorage.setItem('defEra', JSON.stringify(defEra));
+function getEraColor(d){ return dynColorsEra[d] || defEra[d] || '#d7c8ff'; }
+function saveDefaults(){ localStorage.setItem('defEmp_addOrder', JSON.stringify(defEmp)); localStorage.setItem('defEra_addOrder', JSON.stringify(defEra)); localStorage.setItem('paletteCursor', String(paletteCursor)); }
+function updateChipControls(){
+  const ctr = $('#chipControls');
+  if(!editingDyn){ ctr.classList.remove('active'); $('#editingName').textContent='（尚未选择）'; return; }
+  ctr.classList.add('active'); $('#editingName').textContent = editingDyn+'（皇帝色/年号色）';
+  $('#editEmp').value = getEmpColor(editingDyn); $('#editEra').value = getEraColor(editingDyn);
 }
-function rebuildDefaults(dynList){
-  defEmp={}; defEra={};
-  localStorage.removeItem('defEmp'); localStorage.removeItem('defEra');
-  assignSequentialDefaults(dynList);
+
+// 在“添加朝代”时给未分配的朝代挑一个未被使用的颜色
+function assignDefaultForDynasty(d){
+  if(defEmp[d]) return;
+  const used = new Set(Object.values(defEmp));
+  let tries = 0;
+  let idx = paletteCursor % EMP_PALETTE.length;
+  while(tries < EMP_PALETTE.length && used.has(EMP_PALETTE[idx])){
+    idx = (idx + 1) % EMP_PALETTE.length; tries++;
+  }
+  const emp = EMP_PALETTE[idx];
+  defEmp[d] = emp; defEra[d] = eraFromEmp(emp);
+  paletteCursor = (idx + 1) % EMP_PALETTE.length;
+  saveDefaults();
 }
 
 // ===== load
@@ -187,11 +191,7 @@ function loadData(){
       });
     }
 
-    // 构建顺序并分配默认色
     var list=Object.keys(dynSet).sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start});
-    assignSequentialDefaults(list);
-
-    // 下拉
     var sel=$('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
     list.forEach(function(d){ var o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o)});
 
@@ -203,25 +203,38 @@ function loadData(){
 function renderChips(){
   var wrap=$('#chips'); wrap.innerHTML='';
   pickedDynasties.forEach(function(d){
-    var span=document.createElement('span'); span.className='chip';
+    var span=document.createElement('span'); span.className='chip'+(editingDyn===d?' active':'');
     var rng=dynRangeMap[d]; var txt=rng?('（'+Math.trunc(rng.start)+' — '+Math.trunc(rng.end)+'）'):'';
-    var border = (d===editingDyn)?'2px solid #111827':'1px solid #e5e7eb';
-    span.style.border = border;
-    span.innerHTML="<span class='dot' style='background:"+getEmpColor(d)+"'></span>"+d+txt+"<button class='rm'>×</button>";
-    span.querySelector('.rm').addEventListener('click',function(){pickedDynasties=pickedDynasties.filter(function(x){return x!==d}); if(editingDyn===d){ editingDyn=pickedDynasties[pickedDynasties.length-1]||''; updateEditingName(); } renderChips(); draw()});
+    span.innerHTML="<span class='dot' style='background:"+getEmpColor(d)+"'></span>"+d+txt+"<button class='rm' title='移除'>×</button>";
+    span.addEventListener('click',function(e){
+      if(e.target.classList.contains('rm')) return;
+      editingDyn=d; updateChipControls(); renderChips(); draw();
+    });
+    span.querySelector('.rm').addEventListener('click',function(e){
+      e.stopPropagation();
+      pickedDynasties=pickedDynasties.filter(function(x){return x!==d});
+      if(editingDyn===d){ editingDyn=pickedDynasties[pickedDynasties.length-1]||''; updateChipControls(); }
+      renderChips(); draw();
+    });
     wrap.appendChild(span);
   });
+  updateChipControls();
 }
 
 // ===== interaction
-function addDyn(){ var v=$('#dynSelect').value; if(!v) return; if(pickedDynasties.indexOf(v)>=0) return; pickedDynasties.push(v); editingDyn=v; updateEditingName(); pickedDynasties.sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start}); renderChips(); draw() }
+function addDyn(){
+  var v=$('#dynSelect').value; if(!v) return; if(pickedDynasties.indexOf(v)>=0) return;
+  assignDefaultForDynasty(v); // 分配默认色
+  pickedDynasties.push(v);
+  editingDyn=v; renderChips(); draw();
+}
 function parseInput(val){ var s=String(val||'').trim(); if(!s) return null; var p=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/); if(!p) return parseFloat(s); var y=parseInt(p[1],10); var m=p[2]?parseInt(p[2],10):null; return m==null?y:(y+(y<0?-1:1)*(m/12)); }
-function autoPickByRange(){ if(!$('#autoPick').checked) return; var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity; var m=[]; Object.keys(dynRangeMap).forEach(function(d){var r=dynRangeMap[d]; if(r.end>=s && r.start<=e) m.push(d)}); pickedDynasties=m; editingDyn = pickedDynasties[pickedDynasties.length-1]||''; updateEditingName(); renderChips() }
-function applyRange(){ customStart=$('#startYear').value?parseInput($('#startYear').value):null; customEnd=$('#endYear').value?parseInput($('#endYear').value):null; if(customStart!=null&&customEnd!=null&&customStart>customEnd){var t=customStart;customStart=customEnd;customEnd=t} autoPickByRange(); draw() }
-function clearRange(){ customStart=customEnd=null; $('#startYear').value=''; $('#endYear').value=''; if($('#autoPick').checked){ pickedDynasties=[]; editingDyn=''; updateEditingName(); renderChips() } draw() }
+function autoPickByRange(){ if(!$('#autoPick').checked) return; var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity; var m=[]; Object.keys(dynRangeMap).forEach(function(d){var r=dynRangeMap[d]; if(r.end>=s && r.start<=e) m.push(d)}); pickedDynasties=m; editingDyn = pickedDynasties[pickedDynasties.length-1]||''; renderChips() }
+function applyRange(){ customStart=$('#startYear').value?parseInput($('#startYear').value):null; customEnd=$('#endYear').value?parseInput($('#endYear').value):null; if(customStart!=null&&customEnd!=null&&customStart>customEnd){var t=customStart;customStart=customEnd;customEnd=t} if($('#autoPick').checked){autoPickByRange();} draw() }
+function clearRange(){ customStart=customEnd=null; $('#startYear').value=''; $('#endYear').value=''; if($('#autoPick').checked){ pickedDynasties=[]; editingDyn=''; renderChips() } draw() }
 
 $('#btnAdd').addEventListener('click',addDyn);
-$('#btnClear').addEventListener('click',function(){pickedDynasties=[]; editingDyn=''; updateEditingName(); renderChips(); draw()});
+$('#btnClear').addEventListener('click',function(){pickedDynasties=[]; editingDyn=''; renderChips(); draw()});
 $('#btnApplyRange').addEventListener('click',applyRange);
 $('#btnClearRange').addEventListener('click',clearRange);
 $('#autoPick').addEventListener('change',function(){autoPickByRange();draw()});
@@ -229,15 +242,13 @@ $('#showGrid').addEventListener('change',draw);
 $('#showEra').addEventListener('change',draw);
 $('#zoom').addEventListener('input',function(e){ zoom=parseFloat(e.target.value)||1; $('#zoomVal').textContent=(zoom.toFixed(1)+'×'); draw(); });
 
+// 颜色调整：作用到当前选中的 chip 所属朝代
 $('#editEmp').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEmp[editingDyn]=this.value; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); renderChips(); draw(); });
 $('#editEra').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEra[editingDyn]=this.value; localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); draw(); });
-$('#btnRestoreAll').addEventListener('click',function(){
-  var list=Object.keys(dynSet).sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start});
-  dynColorsEmp={}; dynColorsEra={}; localStorage.removeItem('dynColorsEmp'); localStorage.removeItem('dynColorsEra');
-  rebuildDefaults(list); updateEditingName(); renderChips(); draw();
-});
+$('#btnResetOne').addEventListener('click',function(){ if(!editingDyn) return; delete dynColorsEmp[editingDyn]; delete dynColorsEra[editingDyn]; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); renderChips(); draw(); });
+$('#btnResetAll').addEventListener('click',function(){ dynColorsEmp={}; dynColorsEra={}; localStorage.removeItem('dynColorsEmp'); localStorage.removeItem('dynColorsEra'); renderChips(); draw(); });
 
-// ===== draw (left labels frozen + right bars scroll)
+// ===== draw (left labels frozen + right bars scroll，左右留白避免截断)
 function draw(){
   var tip=$('#tip'); tip.style.display='none';
   var list=rows.filter(function(r){return pickedDynasties.indexOf(r.朝代)>=0});
@@ -252,9 +263,10 @@ function draw(){
   if(customEnd!=null) maxYear=Math.min(maxYear,customEnd);
   var fullRange=maxYear-minYear; if(fullRange<=0) fullRange=1;
 
-  var labelsW=260,topPad=24,rowH=32,gap=10,groupGap=20;
+  var labelsW=300,topPad=24,rowH=32,gap=10,groupGap=20;
   var wrapRightWidth = Math.max(1200, document.querySelector('.scroll-col').clientWidth-2);
-  var contentW = (wrapRightWidth)*zoom; // 右侧可滚动区域宽度
+  var marginPx = 40; // 关键：左右留白，避免网格与条形被截断
+  var contentW = (wrapRightWidth)*zoom + marginPx*2;
   var rowsCount=0; dyns.forEach(function(d){rowsCount+=groups[d].length});
   var H=topPad+dyns.length*24+rowsCount*(rowH+gap)+(dyns.length-1)*groupGap+80;
   var axisY=H-40;
@@ -262,12 +274,18 @@ function draw(){
   var labelsSvg=$('#labelsSvg'); labelsSvg.setAttribute('width',labelsW); labelsSvg.setAttribute('height',H); labelsSvg.innerHTML='';
   var barsSvg=$('#barsSvg'); barsSvg.setAttribute('width',contentW); barsSvg.setAttribute('height',H); barsSvg.innerHTML='';
 
-  function scale(y){ return ((y-minYear)/fullRange) * contentW; }
+  function scale(y){ return marginPx + ((y-minYear)/fullRange) * (contentW - marginPx*2); }
 
   // 刻度：zoom=1 时 5 年；每 +1 减 1；最小 1
   var step = Math.max(1, Math.floor(6 - zoom));
   var startTick=Math.ceil(minYear/step)*step;
   if($('#showGrid').checked){
+    // 先画最左/最右两条边界线，保证不被截断
+    ['min','max'].forEach(function(which){
+      var x = (which==='min')? scale(minYear) : scale(maxYear);
+      var v=document.createElementNS('http://www.w3.org/2000/svg','line');
+      v.setAttribute('x1',x);v.setAttribute('x2',x);v.setAttribute('y1',topPad);v.setAttribute('y2',axisY);v.setAttribute('class','grid-v');barsSvg.appendChild(v);
+    });
     for(var t=startTick;t<=maxYear;t+=step){
       var x=scale(t);
       var v=document.createElementNS('http://www.w3.org/2000/svg','line');
@@ -313,7 +331,7 @@ function draw(){
       var outline=document.createElementNS('http://www.w3.org/2000/svg','rect');
       outline.setAttribute('x',ex1);outline.setAttribute('y',y);outline.setAttribute('width',width);outline.setAttribute('height',rowH);outline.setAttribute('rx',8);outline.setAttribute('class','bar-outline');
       barsSvg.appendChild(outline);
-      // emperor tooltip
+      // emperor tooltip（起止）
       rect.addEventListener('mousemove', function(ev){ var tip=document.getElementById('tip'); tip.style.display='block'; tip.style.left=(ev.clientX+12)+'px'; tip.style.top=(ev.clientY+12)+'px'; tip.innerHTML = '<strong>'+labelText+'</strong>'; });
       rect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
 
@@ -361,14 +379,23 @@ function draw(){
     cursorY+=groups[d].length*(rowH+gap)+groupGap;
   });
 
-  // axis
+  // axis（也要覆盖到两端留白）
   var axis=document.createElementNS('http://www.w3.org/2000/svg','line');
   var axisY2=H-40;
   axis.setAttribute('x1',0);axis.setAttribute('x2',contentW);axis.setAttribute('y1',axisY2);axis.setAttribute('y2',axisY2);axis.setAttribute('class','axis');
   barsSvg.appendChild(axis);
   var step2=Math.max(1, Math.floor(6 - zoom)); var startTick2=Math.ceil(minYear/step2)*step2;
+  // 左右端刻度
+  [minYear,maxYear].forEach(function(v){
+    var x=scale(v);
+    var tick=document.createElementNS('http://www.w3.org/2000/svg','line');
+    tick.setAttribute('x1',x);tick.setAttribute('x2',x);tick.setAttribute('y1',axisY2);tick.setAttribute('y2',axisY2+6);tick.setAttribute('class','axis');barsSvg.appendChild(tick);
+    var lbl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    lbl.setAttribute('x',x);lbl.setAttribute('y',axisY2+18);lbl.setAttribute('text-anchor','middle');lbl.setAttribute('class','axis');lbl.textContent=(v<0?('前'+(-Math.trunc(v))):Math.trunc(v));
+    barsSvg.appendChild(lbl);
+  });
   for(var t=startTick2;t<=maxYear;t+=step2){
-    var x=((t-minYear)/fullRange)*contentW;
+    var x=scale(t);
     var tick=document.createElementNS('http://www.w3.org/2000/svg','line');
     tick.setAttribute('x1',x);tick.setAttribute('x2',x);tick.setAttribute('y1',axisY2);tick.setAttribute('y2',axisY2+6);tick.setAttribute('class','axis');barsSvg.appendChild(tick);
     var lbl=document.createElementNS('http://www.w3.org/2000/svg','text');
