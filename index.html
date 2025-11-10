@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>中国皇帝时间轴（冻结左栏·每朝配色·最小宽度增强·边框与提示·刻度1年）</title>
+<title>中国皇帝时间轴（防重叠·默认多配色·悬浮起止·自适应刻度）</title>
 <style>
 :root{--bg:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--axis:#9ca3af;--grid-v:#e5e7eb;--grid-h:#f3f4f6;}
 *{box-sizing:border-box}
@@ -13,28 +13,27 @@ header{padding:24px 16px 0;max-width:1280px;margin:0 auto;}
 h1{margin:0 0 8px;font-size:28px;}
 .card{max-width:1280px;margin:16px auto;background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;}
 .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-select,input[type=number],input[type=color]{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--text);}
+select,input[type=number],input[type=color]{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:#111827;}
 input[type=range]{width:220px}
 .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#111827;color:#fff;font-weight:600;cursor:pointer;}
-.btn.secondary{background:transparent;color:var(--text);}
-.status{margin-top:6px;color:var(--muted);font-size:13px;}
+.btn.secondary{background:transparent;color:#111827;}
+.status{margin-top:6px;color:#6b7280;font-size:13px;}
 .label{fill:#1f2937;font-size:12px}
 .group-title{fill:#1f2937;font-size:13px;font-weight:700}
-.axis text{fill:var(--axis);font-size:12px}
-.axis line{stroke:var(--axis)}
-.grid-v{stroke:var(--grid-v);stroke-width:1;opacity:.7}
-.grid-h{stroke:var(--grid-h);stroke-width:1;opacity:.9}
+.axis text{fill:#9ca3af;font-size:12px}
+.axis line{stroke:#9ca3af}
+.grid-v{stroke:#e5e7eb;stroke-width:1;opacity:.7}
+.grid-h{stroke:#f3f4f6;stroke-width:1;opacity:.9}
 .bar-outline{stroke:rgba(0,0,0,.2);stroke-width:.6;fill:none}
 .timeline-shell{display:grid;grid-template-columns:220px 1fr;gap:0;align-items:start}
-.labels-col{position:sticky;left:0;background:#fff;border-right:1px solid var(--border);z-index:5}
+.labels-col{position:sticky;left:0;background:#fff;border-right:1px solid #e5e7eb;z-index:5}
 .scroll-col{overflow-x:auto;overflow-y:hidden}
 svg{display:block;background:#fff}
 .chips{display:flex;flex-wrap:wrap;gap:8px;}
 .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#f3f4f6;border:1px solid #e5e7eb}
 .chip .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
 .chip .rm{cursor:pointer;border:none;background:transparent;color:#2563eb;font-weight:700}
-.small{font-size:12px;color:var(--muted)}
-/* tooltip */
+.small{font-size:12px;color:#6b7280}
 #tip{position:fixed;display:none;background:#111827;color:#fff;padding:6px 8px;border-radius:8px;font-size:12px;pointer-events:none;z-index:10}
 </style>
 </head>
@@ -66,16 +65,17 @@ svg{display:block;background:#fff}
         <label><input id="autoPick" type="checkbox" checked> 自动选朝代</label>
         <label><input id="showGrid" type="checkbox" checked> 显示网格</label>
         <label><input id="showEra" type="checkbox" checked> 显示年号</label>
-        <span class="small" style="margin-left:16px">默认色：皇帝</span><span class="small" style="background:#a78bfa;padding:0 8px;border-radius:6px;color:#111">浅紫</span>
+        <span class="small" style="margin-left:16px">默认色：皇帝</span><span class="small" style="background:#8b5cf6;padding:0 8px;border-radius:6px;color:#111">浅紫</span>
         <span class="small">年号</span><span class="small" style="background:#fde68a;padding:0 8px;border-radius:6px;color:#111">浅黄</span>
       </div>
       <div class="row">
         <span class="small">当前正在调整：</span><strong id="editingName" class="small">（尚未添加朝代）</strong>
-        <span class="small">皇帝色</span><input id="editEmp" type="color" value="#a78bfa">
+        <span class="small">皇帝色</span><input id="editEmp" type="color" value="#8b5cf6">
         <span class="small">年号色</span><input id="editEra" type="color" value="#fde68a">
         <span class="small">缩放</span><input id="zoom" type="range" min="1" max="4" step="0.1" value="1"><span id="zoomVal" class="small">1.0×</span>
+        <button class="btn secondary" id="btnRestoreAll">还原默认颜色</button>
       </div>
-      <div class="small">提示：添加某个朝代后即自动成为“当前调整对象”，只显示并修改该朝代的颜色；其他朝代使用默认色（皇帝浅紫、年号浅黄）。</div>
+      <div class="small">提示：添加某个朝代后即自动成为“当前调整对象”，只显示并修改该朝代的颜色；其他朝代用默认色（已为常见朝代预设不同配色）。</div>
     </div>
   </div>
 </section>
@@ -101,15 +101,30 @@ function startAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y
 function endAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*(m/12)}
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
 function darken(hex, amt){try{var c=hex.replace('#',''); if(c.length===3){c=c.split('').map(x=>x+x).join('')} var r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16); r=Math.max(0,Math.min(255,r+amt)); g=Math.max(0,Math.min(255,g+amt)); b=Math.max(0,Math.min(255,b+amt)); return '#'+r.toString(16).padStart(2,'0')+g.toString(16).padStart(2,'0')+b.toString(16).padStart(2,'0');}catch(e){return hex;}}
-function yearsSpan(s,e){return (e - s).toFixed(1).replace(/\\.0$/,'');}
+function yr(n){return (n<0?('前'+(-Math.trunc(n))):Math.trunc(n))}
+
+// ===== default colors per dynasty
+const DEFAULT_EMP_COLORS = {
+  "西晋":"#8b5cf6","东晋":"#60a5fa","北魏":"#22c55e","东魏":"#34d399","西魏":"#06b6d4","北周":"#a3e635",
+  "隋":"#f97316","唐":"#ef4444","后梁":"#f59e0b","后唐":"#fb7185","后晋":"#f43f5e","后汉":"#84cc16","后周":"#10b981",
+  "宋":"#6366f1","南宋":"#3b82f6","辽":"#0ea5e9","金":"#0891b2","元":"#14b8a6","明":"#ef4444","清":"#60a5fa"
+};
+const DEFAULT_ERA_COLORS = {
+  "西晋":"#fde68a","东晋":"#fef08a","北魏":"#bbf7d0","东魏":"#a7f3d0","西魏":"#a5f3fc","北周":"#d9f99d",
+  "隋":"#fed7aa","唐":"#fecaca","后梁":"#fef3c7","后唐":"#ffd1dc","后晋":"#ffe4e6","后汉":"#eaffc7","后周":"#ccfbf1",
+  "宋":"#ddd6fe","南宋":"#bfdbfe","辽":"#bae6fd","金":"#a5f3fc","元":"#99f6e4","明":"#fecaca","清":"#fde68a"
+};
 
 // ===== state
 var rows=[], dynSet={}, pickedDynasties=[], dynRangeMap={}, eras=[];
 var customStart=null, customEnd=null, zoom=1;
-var dynEmpColorDefault='#a78bfa', dynEraColorDefault='#fde68a';
 var dynColorsEmp = JSON.parse(localStorage.getItem('dynColorsEmp') || '{}'); // {dyn: '#hex'}
 var dynColorsEra = JSON.parse(localStorage.getItem('dynColorsEra') || '{}'); // {dyn: '#hex'}
 var editingDyn=''; // 当前被编辑的朝代 = 最近添加
+
+function getEmpColor(d){ return dynColorsEmp[d] || DEFAULT_EMP_COLORS[d] || '#8b5cf6'; }
+function getEraColor(d){ return dynColorsEra[d] || DEFAULT_ERA_COLORS[d] || '#fde68a'; }
+function updateEditingName(){ $('#editingName').textContent = editingDyn? (editingDyn+'（皇帝色/年号色）') : '（尚未添加朝代）'; $('#editEmp').value=getEmpColor(editingDyn||''); $('#editEra').value=getEraColor(editingDyn||''); }
 
 // ===== load
 function loadData(){
@@ -153,11 +168,6 @@ function loadData(){
   }).catch(function(e){ $('#status').textContent='加载失败：'+e.message });
 }
 
-// ===== helpers
-function getEmpColor(d){ return dynColorsEmp[d] || dynEmpColorDefault; }
-function getEraColor(d){ return dynColorsEra[d] || dynEraColorDefault; }
-function updateEditingName(){ $('#editingName').textContent = editingDyn? (editingDyn+'（皇帝色/年号色）') : '（尚未添加朝代）'; $('#editEmp').value=getEmpColor(editingDyn||''); $('#editEra').value=getEraColor(editingDyn||''); }
-
 // ===== chips
 function renderChips(){
   var wrap=$('#chips'); wrap.innerHTML='';
@@ -190,6 +200,7 @@ $('#zoom').addEventListener('input',function(e){ zoom=parseFloat(e.target.value)
 
 $('#editEmp').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEmp[editingDyn]=this.value; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); renderChips(); draw(); });
 $('#editEra').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEra[editingDyn]=this.value; localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); draw(); });
+$('#btnRestoreAll').addEventListener('click',function(){ dynColorsEmp={}; dynColorsEra={}; localStorage.removeItem('dynColorsEmp'); localStorage.removeItem('dynColorsEra'); updateEditingName(); renderChips(); draw(); });
 
 // ===== draw (left labels frozen + right bars scroll)
 function draw(){
@@ -218,8 +229,8 @@ function draw(){
 
   function scale(y){ return ((y-minYear)/fullRange) * contentW; }
 
-  // grid vertical & axis in barsSvg ——— 固定 1 年间隔
-  var step=1;
+  // 刻度：zoom=1 时 5 年；每 +1 减 1；最小 1
+  var step = Math.max(1, Math.floor(6 - zoom));
   var startTick=Math.ceil(minYear/step)*step;
   if($('#showGrid').checked){
     for(var t=startTick;t<=maxYear;t+=step){
@@ -256,8 +267,7 @@ function draw(){
 
       var xs=scale(customStart!=null?clamp(r.在位起,customStart,Infinity):r.在位起);
       var xe=scale(customEnd!=null?clamp(r.在位止,-Infinity,customEnd):r.在位止);
-      // ensure minimum width for zero/short durations
-      var minEmpPx=32, ex1=Math.min(xs,xe), ex2=Math.max(xs,xe);
+      var minEmpPx=40, ex1=Math.min(xs,xe), ex2=Math.max(xs,xe);
       var width=Math.max(minEmpPx, ex2-ex1), center=(ex1+ex2)/2; ex1=center-width/2; ex2=center+width/2;
 
       // emperor bar
@@ -269,7 +279,7 @@ function draw(){
       outline.setAttribute('x',ex1);outline.setAttribute('y',y);outline.setAttribute('width',width);outline.setAttribute('height',rowH);outline.setAttribute('rx',8);outline.setAttribute('class','bar-outline');
       barsSvg.appendChild(outline);
 
-      // eras
+      // eras — 防重叠：顺序排布 + 最小间距
       if($('#showEra').checked && eras.length){
         var rel=eras.filter(function(er){return er.dynasty===d && er.emperor===r.姓名 && er.e>=r.在位起 && er.s<=r.在位止}).sort(function(a,b){return a.s-b.s});
         var snapped=[], prevEnd=null;
@@ -279,22 +289,25 @@ function draw(){
           if(prevEnd!=null && s - prevEnd <= 1){ s = prevEnd; }
           snapped.push({name:er.name,s:s,e:e}); prevEnd=e;
         });
-        var minEraPx=28;
+
+        var minEraPx=32, gapPx=3;
+        var nextAllowed = ex1 + 3;
         snapped.forEach(function(er){
           var sx=scale(er.s), ex=scale(er.e);
-          var cx=(sx+ex)/2, w=Math.max(minEraPx, Math.abs(ex-sx)), half=w/2;
-          sx=cx-half; ex=cx+half;
-          // clamp inside emperor bar
+          var desiredCx=(sx+ex)/2, w=Math.max(minEraPx, Math.abs(ex-sx)), half=w/2;
+          sx=desiredCx-half; ex=desiredCx+half;
           var pad=3, eg1=ex1+pad, eg2=ex2-pad;
           if(ex-sx>eg2-eg1){ sx=eg1; ex=eg2; } else { if(sx<eg1){ ex+=eg1-sx; sx=eg1;} if(ex>eg2){ sx-=ex-eg2; ex=eg2;} }
+          if(sx < nextAllowed){ ex += (nextAllowed - sx); sx = nextAllowed; } // 右推防重叠
+          nextAllowed = ex + gapPx;
+
           var ey=y+5, eh=rowH-10;
           var fill=getEraColor(d), stroke=darken(fill,-40);
 
           var eRect=document.createElementNS('http://www.w3.org/2000/svg','rect');
           eRect.setAttribute('x',sx);eRect.setAttribute('y',ey);eRect.setAttribute('width',ex-sx);eRect.setAttribute('height',eh);eRect.setAttribute('rx',6);
           eRect.setAttribute('fill',fill); eRect.setAttribute('stroke',stroke); eRect.setAttribute('stroke-width','1');
-          // tooltip for duration
-          eRect.addEventListener('mousemove', function(ev){ var years=yearsSpan(er.s, er.e); document.getElementById('tip').style.display='block'; document.getElementById('tip').style.left=(ev.clientX+12)+'px'; document.getElementById('tip').style.top=(ev.clientY+12)+'px'; document.getElementById('tip').innerHTML = '<strong>'+er.name+'</strong>：持续 '+ years +' 年'; });
+          eRect.addEventListener('mousemove', function(ev){ var sTxt=yr(er.s), eTxt=yr(er.e); var tip=document.getElementById('tip'); tip.style.display='block'; tip.style.left=(ev.clientX+12)+'px'; tip.style.top=(ev.clientY+12)+'px'; tip.innerHTML = '<strong>'+er.name+'</strong>：'+ sTxt +' — '+ eTxt; });
           eRect.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
           barsSvg.appendChild(eRect);
 
@@ -310,12 +323,12 @@ function draw(){
     cursorY+=groups[d].length*(rowH+gap)+groupGap;
   });
 
-  // axis — 1 年刻度 + 标签
+  // axis
   var axis=document.createElementNS('http://www.w3.org/2000/svg','line');
   var axisY2=H-40;
   axis.setAttribute('x1',0);axis.setAttribute('x2',contentW);axis.setAttribute('y1',axisY2);axis.setAttribute('y2',axisY2);axis.setAttribute('class','axis');
   barsSvg.appendChild(axis);
-  var step2=1; var startTick2=Math.ceil(minYear/step2)*step2;
+  var step2=Math.max(1, Math.floor(6 - zoom)); var startTick2=Math.ceil(minYear/step2)*step2;
   for(var t=startTick2;t<=maxYear;t+=step2){
     var x=((t-minYear)/fullRange)*contentW;
     var tick=document.createElementNS('http://www.w3.org/2000/svg','line');
