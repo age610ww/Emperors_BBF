@@ -4,11 +4,11 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>中国皇帝时间轴（防重叠·默认多配色·悬浮起止·自适应刻度）</title>
+<title>中国皇帝时间轴（顺序分配默认配色·防重叠·悬浮起止·自适应刻度）</title>
 <style>
 :root{--bg:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--axis:#9ca3af;--grid-v:#e5e7eb;--grid-h:#f3f4f6;}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
+body{margin:0;background:#fff;color:#111827;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Noto Sans;}
 header{padding:24px 16px 0;max-width:1280px;margin:0 auto;}
 h1{margin:0 0 8px;font-size:28px;}
 .card{max-width:1280px;margin:16px auto;background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;}
@@ -65,17 +65,15 @@ svg{display:block;background:#fff}
         <label><input id="autoPick" type="checkbox" checked> 自动选朝代</label>
         <label><input id="showGrid" type="checkbox" checked> 显示网格</label>
         <label><input id="showEra" type="checkbox" checked> 显示年号</label>
-        <span class="small" style="margin-left:16px">默认色：皇帝</span><span class="small" style="background:#8b5cf6;padding:0 8px;border-radius:6px;color:#111">浅紫</span>
-        <span class="small">年号</span><span class="small" style="background:#fde68a;padding:0 8px;border-radius:6px;color:#111">浅黄</span>
       </div>
       <div class="row">
         <span class="small">当前正在调整：</span><strong id="editingName" class="small">（尚未添加朝代）</strong>
-        <span class="small">皇帝色</span><input id="editEmp" type="color" value="#8b5cf6">
-        <span class="small">年号色</span><input id="editEra" type="color" value="#fde68a">
+        <span class="small">皇帝色</span><input id="editEmp" type="color">
+        <span class="small">年号色</span><input id="editEra" type="color">
         <span class="small">缩放</span><input id="zoom" type="range" min="1" max="4" step="0.1" value="1"><span id="zoomVal" class="small">1.0×</span>
         <button class="btn secondary" id="btnRestoreAll">还原默认颜色</button>
       </div>
-      <div class="small">提示：添加某个朝代后即自动成为“当前调整对象”，只显示并修改该朝代的颜色；其他朝代用默认色（已为常见朝代预设不同配色）。</div>
+      <div class="small">说明：默认配色按“朝代加载顺序”从预设色板**顺序分配**，保证互不重复；你也可以只针对“最近添加的朝代”进行修改。</div>
     </div>
   </div>
 </section>
@@ -95,7 +93,16 @@ svg{display:block;background:#fff}
 const XLSX_URL = 'emperors.xlsx';
 function $(q,root){return (root||document).querySelector(q)}
 
-// ===== util
+// ===== color utils / palettes
+function hex(n){return n.toString(16).padStart(2,'0')}
+function lighten(hexcolor, amt){try{var c=hexcolor.replace('#',''); if(c.length===3){c=c.split('').map(x=>x+x).join('')} var r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16); r=Math.min(255,r+amt); g=Math.min(255,g+amt); b=Math.min(255,b+amt); return '#'+hex(r)+hex(g)+hex(b);}catch(e){return hexcolor;}}
+function hslToHex(h,s,l){h/=360;s/=100;l/=100;function f(n){let k=(n+h/30)%12,a=l-s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));return Math.round(255*a).toString(16).padStart(2,'0')}return '#'+f(0)+f(8)+f(4)}
+function makePalette(n, sat=64, light=56){let arr=[];for(let i=0;i<n;i++){let hue=(i*137.508)%360;arr.push(hslToHex(hue,sat,light))}return arr}
+const EMP_PALETTE = makePalette(64,64,56);   // 64 个互异的主色
+// ERA 默认用 EMP 的浅色版
+function eraFromEmp(emp){return lighten(emp, 70)}
+
+// ===== parsing utils
 function parseYearPiece(str){var s=String(str||'').trim();if(s==='')return[null,null];var m=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/);if(!m)return[Number(s.replace(/[^-0-9.]/g,'')),null];return[parseInt(m[1],10),m[2]?parseInt(m[2],10):null]}
 function startAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*((m-1)/12)}
 function endAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*(m/12)}
@@ -103,28 +110,41 @@ function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
 function darken(hex, amt){try{var c=hex.replace('#',''); if(c.length===3){c=c.split('').map(x=>x+x).join('')} var r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16); r=Math.max(0,Math.min(255,r+amt)); g=Math.max(0,Math.min(255,g+amt)); b=Math.max(0,Math.min(255,b+amt)); return '#'+r.toString(16).padStart(2,'0')+g.toString(16).padStart(2,'0')+b.toString(16).padStart(2,'0');}catch(e){return hex;}}
 function yr(n){return (n<0?('前'+(-Math.trunc(n))):Math.trunc(n))}
 
-// ===== default colors per dynasty
-const DEFAULT_EMP_COLORS = {
-  "西晋":"#8b5cf6","东晋":"#60a5fa","北魏":"#22c55e","东魏":"#34d399","西魏":"#06b6d4","北周":"#a3e635",
-  "隋":"#f97316","唐":"#ef4444","后梁":"#f59e0b","后唐":"#fb7185","后晋":"#f43f5e","后汉":"#84cc16","后周":"#10b981",
-  "宋":"#6366f1","南宋":"#3b82f6","辽":"#0ea5e9","金":"#0891b2","元":"#14b8a6","明":"#ef4444","清":"#60a5fa"
-};
-const DEFAULT_ERA_COLORS = {
-  "西晋":"#fde68a","东晋":"#fef08a","北魏":"#bbf7d0","东魏":"#a7f3d0","西魏":"#a5f3fc","北周":"#d9f99d",
-  "隋":"#fed7aa","唐":"#fecaca","后梁":"#fef3c7","后唐":"#ffd1dc","后晋":"#ffe4e6","后汉":"#eaffc7","后周":"#ccfbf1",
-  "宋":"#ddd6fe","南宋":"#bfdbfe","辽":"#bae6fd","金":"#a5f3fc","元":"#99f6e4","明":"#fecaca","清":"#fde68a"
-};
-
 // ===== state
 var rows=[], dynSet={}, pickedDynasties=[], dynRangeMap={}, eras=[];
 var customStart=null, customEnd=null, zoom=1;
-var dynColorsEmp = JSON.parse(localStorage.getItem('dynColorsEmp') || '{}'); // {dyn: '#hex'}
-var dynColorsEra = JSON.parse(localStorage.getItem('dynColorsEra') || '{}'); // {dyn: '#hex'}
-var editingDyn=''; // 当前被编辑的朝代 = 最近添加
+var dynColorsEmp = JSON.parse(localStorage.getItem('dynColorsEmp') || '{}'); // 用户自定义覆盖
+var dynColorsEra = JSON.parse(localStorage.getItem('dynColorsEra') || '{}');
+var defEmp = JSON.parse(localStorage.getItem('defEmp') || '{}'); // 默认配色（顺序分配）
+var defEra = JSON.parse(localStorage.getItem('defEra') || '{}');
+var editingDyn=''; // 最近添加
 
-function getEmpColor(d){ return dynColorsEmp[d] || DEFAULT_EMP_COLORS[d] || '#8b5cf6'; }
-function getEraColor(d){ return dynColorsEra[d] || DEFAULT_ERA_COLORS[d] || '#fde68a'; }
+function getEmpColor(d){ return dynColorsEmp[d] || defEmp[d] || '#8b5cf6'; }
+function getEraColor(d){ return dynColorsEra[d] || defEra[d] || '#fde68a'; }
 function updateEditingName(){ $('#editingName').textContent = editingDyn? (editingDyn+'（皇帝色/年号色）') : '（尚未添加朝代）'; $('#editEmp').value=getEmpColor(editingDyn||''); $('#editEra').value=getEraColor(editingDyn||''); }
+
+// ===== assign default colors sequentially
+function assignSequentialDefaults(dynList){
+  // 按 dynList 里的顺序给没分配过的朝代依次取色
+  let used = new Set(Object.values(defEmp));
+  let idx = 0;
+  dynList.forEach(d=>{
+    if(!defEmp[d]){
+      // 找到一个未被使用的调色板色
+      while(idx < EMP_PALETTE.length && used.has(EMP_PALETTE[idx])) idx++;
+      let emp = EMP_PALETTE[idx % EMP_PALETTE.length];
+      defEmp[d]=emp; defEra[d]=eraFromEmp(emp);
+      used.add(emp); idx++;
+    }
+  });
+  localStorage.setItem('defEmp', JSON.stringify(defEmp));
+  localStorage.setItem('defEra', JSON.stringify(defEra));
+}
+function rebuildDefaults(dynList){
+  defEmp={}; defEra={};
+  localStorage.removeItem('defEmp'); localStorage.removeItem('defEra');
+  assignSequentialDefaults(dynList);
+}
 
 // ===== load
 function loadData(){
@@ -159,8 +179,11 @@ function loadData(){
       });
     }
 
-    // 下拉
+    // 构建顺序并分配默认色
     var list=Object.keys(dynSet).sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start});
+    assignSequentialDefaults(list);
+
+    // 下拉
     var sel=$('#dynSelect'); sel.innerHTML='<option value=\"\">选择一个朝代</option>';
     list.forEach(function(d){ var o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o)});
 
@@ -200,7 +223,11 @@ $('#zoom').addEventListener('input',function(e){ zoom=parseFloat(e.target.value)
 
 $('#editEmp').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEmp[editingDyn]=this.value; localStorage.setItem('dynColorsEmp',JSON.stringify(dynColorsEmp)); renderChips(); draw(); });
 $('#editEra').addEventListener('input',function(){ if(!editingDyn) return; dynColorsEra[editingDyn]=this.value; localStorage.setItem('dynColorsEra',JSON.stringify(dynColorsEra)); draw(); });
-$('#btnRestoreAll').addEventListener('click',function(){ dynColorsEmp={}; dynColorsEra={}; localStorage.removeItem('dynColorsEmp'); localStorage.removeItem('dynColorsEra'); updateEditingName(); renderChips(); draw(); });
+$('#btnRestoreAll').addEventListener('click',function(){
+  var list=Object.keys(dynSet).sort(function(a,b){return dynRangeMap[a].start-dynRangeMap[b].start});
+  dynColorsEmp={}; dynColorsEra={}; localStorage.removeItem('dynColorsEmp'); localStorage.removeItem('dynColorsEra');
+  rebuildDefaults(list); updateEditingName(); renderChips(); draw();
+});
 
 // ===== draw (left labels frozen + right bars scroll)
 function draw(){
@@ -289,7 +316,6 @@ function draw(){
           if(prevEnd!=null && s - prevEnd <= 1){ s = prevEnd; }
           snapped.push({name:er.name,s:s,e:e}); prevEnd=e;
         });
-
         var minEraPx=32, gapPx=3;
         var nextAllowed = ex1 + 3;
         snapped.forEach(function(er){
