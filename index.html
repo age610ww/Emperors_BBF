@@ -17,6 +17,7 @@ input[type=range]{width:220px}
 .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#111827;color:#fff;font-weight:600;cursor:pointer;}
 .btn.secondary{background:transparent;color:#111827;}
 .status{margin-top:6px;color:#6b7280;font-size:13px;}
+.status.err{color:#b91c1c}
 .label{fill:#1f2937;font-size:12px}
 .group-title{fill:#1f2937;font-size:13px;font-weight:700}
 .axis text{fill:#9ca3af;font-size:12px}
@@ -115,7 +116,7 @@ function fmtYear(y,m){ if(y==null) return ''; return (m? (y+'.'+String(m).padSta
 function yr(n){return (n<0?('前'+(-Math.trunc(n))):Math.trunc(n))}
 
 // ===== parsing utils
-function parseYearPiece(str){var s=String(str||'').trim();if(s==='')return[null,null];var m=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/);if(!m)return[Number(s.replace(/[^-0-9.]/g,'')),null];return[parseInt(m[1],10),m[2]?parseInt(m[2],10):null]}
+function parseYearPiece(str){var s=String(str||'').trim();if(s==='')return[null,null];var m=s.match(/^(-?\d+)(?:\\.(\d{1,2}))?$/);if(!m)return[Number(s.replace(/[^-0-9.]/g,'')),null];return[parseInt(m[1],10),m[2]?parseInt(m[2],10):null]}
 function startAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*((m-1)/12)}
 function endAsFloat(y,m){if(y==null)return null;if(m==null)return y;var sign=y<0?-1:1;return y+sign*(m/12)}
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
@@ -158,7 +159,15 @@ function assignDefaultForDynasty(d){
 
 // ===== load
 function loadData(){
-  fetch(XLSX_URL,{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('无法加载 emperors.xlsx');return r.arrayBuffer()}).then(function(buf){
+  const statusEl = $('#status');
+  function fail(msg){
+    statusEl.classList.add('err');
+    statusEl.textContent = msg + ' · 请确认：1) emperors.xlsx 与本 HTML 在同一目录；2) 文件名/大小写一致；3) GitHub Pages 已发布最新文件；4) 浏览器未拦截 jsDelivr。';
+    const sel=$('#dynSelect');
+    if(sel && sel.options.length){ sel.options[0].textContent = '无法加载数据（请检查路径/大小写）'; }
+  }
+  if(typeof XLSX === 'undefined'){ fail('加载失败：未能加载 XLSX 库'); return; }
+  fetch(XLSX_URL,{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('无法加载 emperors.xlsx（HTTP '+r.status+'）');return r.arrayBuffer()}).then(function(buf){
     var wb=XLSX.read(buf,{type:'array'});
     rows=[];var rowIndex=0;dynSet={};dynRangeMap={};
     wb.SheetNames.forEach(function(sn){
@@ -226,7 +235,7 @@ function addDyn(){
   pickedDynasties.push(v);
   editingDyn=v; renderChips(); draw();
 }
-function parseInput(val){ var s=String(val||'').trim(); if(!s) return null; var p=s.match(/^(-?\\d+)(?:\\.(\\d{1,2}))?$/); if(!p) return parseFloat(s); var y=parseInt(p[1],10); var m=p[2]?parseInt(p[2],10):null; return m==null?y:(y+(y<0?-1:1)*(m/12)); }
+function parseInput(val){ var s=String(val||'').trim(); if(!s) return null; var p=s.match(/^(-?\d+)(?:\\.(\d{1,2}))?$/); if(!p) return parseFloat(s); var y=parseInt(p[1],10); var m=p[2]?parseInt(p[2],10):null; return m==null?y:(y+(y<0?-1:1)*(m/12)); }
 function autoPickByRange(){ if(!$('#autoPick').checked) return; var s=customStart!=null?customStart:-Infinity; var e=customEnd!=null?customEnd:Infinity; var m=[]; Object.keys(dynRangeMap).forEach(function(d){var r=dynRangeMap[d]; if(r.end>=s && r.start<=e) m.push(d)}); pickedDynasties=m; editingDyn = pickedDynasties[pickedDynasties.length-1]||''; renderChips() }
 function applyRange(){ customStart=$('#startYear').value?parseInput($('#startYear').value):null; customEnd=$('#endYear').value?parseInput($('#endYear').value):null; if(customStart!=null&&customEnd!=null&&customStart>customEnd){var t=customStart;customStart=customEnd;customEnd=t} if($('#autoPick').checked){autoPickByRange();} draw() }
 function clearRange(){ customStart=customEnd=null; $('#startYear').value=''; $('#endYear').value=''; if($('#autoPick').checked){ pickedDynasties=[]; editingDyn=''; renderChips() } draw() }
