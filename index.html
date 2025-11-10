@@ -342,8 +342,9 @@ function draw(){
           snapped.push({name:er.name,s:s,e:e}); prevEnd=e;
         });
 
-        var minEraPx=32, gapPx=3;
-        var nextAllowed = ex1 + 3;
+        var minEraPx=32;
+var minGapPx = Math.max(6, 8 * zoom); // 缩放时动态调整最小间距
+var nextAllowed = ex1 + minGapPx;
         snapped.forEach(function(er){
           var sx=scale(er.s), ex=scale(er.e);
           // 以中点定位，再保证在 emperor 边界内
@@ -368,7 +369,7 @@ function draw(){
               ex = eg2; sx = Math.max(eg1, sx - overflow);
             }
           }
-          nextAllowed = ex + gapPx;
+          nextAllowed = ex + minGapPx;
 
           var ey=y+5, eh=rowH-10;
           var fill=getEraColor(d), stroke=darken(fill,-40);
